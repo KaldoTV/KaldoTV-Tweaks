@@ -1,4 +1,6 @@
 package-as: kaldo_tweaks
+manual-changelog: CHANGELOG.md
+changelog-title: Changelog
 
 ignore:
   - .github
