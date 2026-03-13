@@ -1,4 +1,4 @@
-package-as: Kaldo_Tweaks
+package-as: kaldo_tweaks
 
 ignore:
   - .github
