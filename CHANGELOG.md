@@ -1,3 +1,9 @@
+## v0.3.1
+- Adding 12.0.5 version as available for this addon
+- Revamped buff check module
+  - multiple buff added to buff check
+  - new check incoming soon
+
 ## v0.3.0
 - Global refactor (AI Assisted)
 - Kaldotv_tweaks is now available on Github
