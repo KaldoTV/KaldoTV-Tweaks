@@ -1,0 +1,21 @@
+## Interface: 120000
+## Title: Kaldo Tweaks
+## Notes: Small tweaks for Blizz UI made by KaldoTV
+## Author: KaldoTV
+## Version: 0.1.2-Beta
+## SavedVariables: KaldoDB
+## OptionalDeps: LibSharedMedia-3.0
+
+locales.lua
+db.lua
+text_alert.lua
+macro_utils.lua
+core.lua
+ui.lua
+modules/equipment_info.lua
+modules/craft_order_received.lua
+modules/pet_alert.lua
+modules/buff_check.lua
+modules/mm_keys.lua
+modules/auto_macros.lua
+modules/auto_potion.lua
