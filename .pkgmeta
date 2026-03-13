@@ -1,0 +1,5 @@
+package-as: Kaldo_Tweaks
+
+ignore:
+  - .github
+  - README.md

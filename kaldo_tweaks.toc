@@ -1,10 +1,11 @@
-## Interface: 120000
+## Interface: 120001
 ## Title: Kaldo Tweaks
 ## Notes: Small tweaks for Blizz UI made by KaldoTV
 ## Author: KaldoTV
-## Version: 0.1.2-Beta
+## Version: 0.3.0
 ## SavedVariables: KaldoDB
 ## OptionalDeps: LibSharedMedia-3.0
+## X-Curse-Project-ID: 1449925
 
 locales.lua
 db.lua
