@@ -99,9 +99,3 @@ Creates or updates a self-heal / potion macro based on available items, known sp
 - Most modules are disabled by default.
 - Settings are stored in `KaldoDB`.
 - Existing saved variables are migrated automatically when needed.
-
-## Roadmap
-
-- ongoing cleanup and refactor for public release
-- localization polish
-- further CPU-focused optimization where useful
