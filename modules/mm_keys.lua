@@ -83,12 +83,32 @@ local function normalizeMsg(msg)
   return msg
 end
 
-local function isKeysCommand(msg)
-  if C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive and C_ChallengeMode.IsChallengeModeActive() then return end
+local function shouldSuppressKeysChat()
+  if InCombatLockdown and InCombatLockdown() then
+    return true
+  end
+
+  if C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive and C_ChallengeMode.IsChallengeModeActive() then
+    return true
+  end
+
   local currentRunID = C_MythicPlus.GetCurrentRunID and C_MythicPlus.GetCurrentRunID()
   if currentRunID then
-    return
+    return true
   end
+
+  if GetInstanceInfo then
+    local _, instanceType = GetInstanceInfo()
+    if instanceType == "pvp" or instanceType == "arena" then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function isKeysCommand(msg)
+  if shouldSuppressKeysChat() then return end
   msg = normalizeMsg(msg)
   return msg == "!key" or msg == "!keys"
 end
@@ -374,12 +394,7 @@ function M:RespondKeys(event)
   local db = self.db or self:EnsureDB()
   if not db.respond_keys then return end
   if IsInRaid and IsInRaid() then return end
-  
-  if C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive and C_ChallengeMode.IsChallengeModeActive() then return end
-  local currentRunID = C_MythicPlus.GetCurrentRunID and C_MythicPlus.GetCurrentRunID()
-  if currentRunID then
-    return
-  end
+  if shouldSuppressKeysChat() then return end
 
   local channel
   if event == "CHAT_MSG_PARTY" or event == "CHAT_MSG_PARTY_LEADER" then
@@ -467,6 +482,9 @@ function M:OnEvent(event, ...)
     or event == "CHAT_MSG_PARTY_LEADER"
     or event == "CHAT_MSG_INSTANCE_CHAT"
     or event == "CHAT_MSG_INSTANCE_CHAT_LEADER" then
+    if shouldSuppressKeysChat() then
+      return
+    end
     local msg = ...
     if isKeysCommand(msg) then
       self:RespondKeys(event)

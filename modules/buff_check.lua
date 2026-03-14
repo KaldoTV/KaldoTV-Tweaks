@@ -669,18 +669,39 @@ local function ResolveTargetUnit(rule, roles)
   return nil
 end
 
+local function IsUnitEligibleForBuffCheck(unit, options)
+  if not (unit and UnitExists(unit)) then
+    return false
+  end
+  if UnitIsDeadOrGhost(unit) then
+    return false
+  end
+  if options and options.excludePlayer and unit == "player" then
+    return false
+  end
+  if unit == "player" then
+    return true
+  end
+  if UnitDistanceSquared then
+    local distanceSquared, checkedDistance, valid = UnitDistanceSquared(unit)
+    if valid and checkedDistance and type(distanceSquared) == "number" then
+      return distanceSquared <= (40 * 40)
+    end
+  end
+  return true
+end
+
 local function HasAuraOnAnyUnit(units, spellId, auraName, options)
-  local excludePlayer = options and options.excludePlayer
+  local eligibleCount = 0
   for _, unit in ipairs(units or {}) do
-    if UnitExists(unit) and not UnitIsDeadOrGhost(unit) then
-      if not (excludePlayer and unit == "player") then
-        if HasBuff(unit, spellId, auraName) then
-          return true
-        end
+    if IsUnitEligibleForBuffCheck(unit, options) then
+      eligibleCount = eligibleCount + 1
+      if HasBuff(unit, spellId, auraName) then
+        return true, eligibleCount
       end
     end
   end
-  return false
+  return false, eligibleCount
 end
 
 local function EvaluateRaidRule(rule, context)
@@ -688,12 +709,18 @@ local function EvaluateRaidRule(rule, context)
     return not HasBuff("player", rule.auraSpellID, context.auraNames[rule.key])
   end
 
+  local eligibleCount = 0
   for _, unit in ipairs(context.units) do
-    if UnitExists(unit) and not UnitIsDeadOrGhost(unit) then
+    if IsUnitEligibleForBuffCheck(unit) then
+      eligibleCount = eligibleCount + 1
       if not HasBuff(unit, rule.auraSpellID, context.auraNames[rule.key]) then
         return true
       end
     end
+  end
+
+  if eligibleCount == 0 then
+    return false
   end
 
   return false
@@ -702,11 +729,15 @@ end
 local function EvaluateTargetedRule(rule, context)
   local targetType = rule.target and rule.target.type or "self"
   if targetType == "any_one" then
-    return not HasAuraOnAnyUnit(context.units, rule.auraSpellID, context.auraNames[rule.key], rule.target)
+    local found, eligibleCount = HasAuraOnAnyUnit(context.units, rule.auraSpellID, context.auraNames[rule.key], rule.target)
+    if eligibleCount == 0 then
+      return false
+    end
+    return not found
   end
 
   local unit = ResolveTargetUnit(rule, context.roles)
-  if not (unit and UnitExists(unit)) then
+  if not IsUnitEligibleForBuffCheck(unit, rule.target) then
     return false
   end
   return not HasBuff(unit, rule.auraSpellID, context.auraNames[rule.key])
