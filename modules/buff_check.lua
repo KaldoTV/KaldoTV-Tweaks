@@ -15,6 +15,8 @@ M.events = {
   "PLAYER_ROLES_ASSIGNED",
   "PARTY_LEADER_CHANGED",
   "PLAYER_ENTERING_WORLD",
+  "PLAYER_REGEN_DISABLED",
+  "PLAYER_REGEN_ENABLED",
 }
 
 local CATEGORY_ORDER = {
@@ -49,10 +51,12 @@ local REMINDER_RULES = {
     mode = "raid",
     label = "Arcane Intellect",
     auraSpellID = 1459,
+    castSpellID = 1459,
     icon = 135932,
     providers = { classes = { "MAGE" } },
     target = { type = "group" },
     onlyIfProviderPresent = true,
+    restrictedGlowFallback = true,
   },
   {
     key = "battle_shout",
@@ -60,10 +64,12 @@ local REMINDER_RULES = {
     mode = "raid",
     label = "Battle Shout",
     auraSpellID = 6673,
+    castSpellID = 6673,
     icon = 132333,
     providers = { classes = { "WARRIOR" } },
     target = { type = "group" },
     onlyIfProviderPresent = true,
+    restrictedGlowFallback = true,
   },
   {
     key = "blessing_of_the_bronze",
@@ -71,10 +77,12 @@ local REMINDER_RULES = {
     mode = "raid",
     label = "Blessing of the Bronze",
     auraSpellID = 381748,
+    castSpellID = 364342,
     icon = 4622448,
     providers = { classes = { "EVOKER" } },
     target = { type = "group" },
     onlyIfProviderPresent = true,
+    restrictedGlowFallback = true,
   },
   {
     key = "mark_of_the_wild",
@@ -82,10 +90,12 @@ local REMINDER_RULES = {
     mode = "raid",
     label = "Mark of the Wild",
     auraSpellID = 1126,
+    castSpellID = 1126,
     icon = 136078,
     providers = { classes = { "DRUID" } },
     target = { type = "group" },
     onlyIfProviderPresent = true,
+    restrictedGlowFallback = true,
   },
   {
     key = "power_word_fortitude",
@@ -93,10 +103,12 @@ local REMINDER_RULES = {
     mode = "raid",
     label = "Power Word: Fortitude",
     auraSpellID = 21562,
+    castSpellID = 21562,
     icon = 135987,
     providers = { classes = { "PRIEST" } },
     target = { type = "group" },
     onlyIfProviderPresent = true,
+    restrictedGlowFallback = true,
   },
   {
     key = "skyfury",
@@ -104,22 +116,24 @@ local REMINDER_RULES = {
     mode = "raid",
     label = "Skyfury",
     auraSpellID = 462854,
+    castSpellID = 462854,
     icon = 4630367,
     providers = { classes = { "SHAMAN" } },
     target = { type = "group" },
     onlyIfProviderPresent = true,
+    restrictedGlowFallback = true,
   },
 
   -- Targeted
   {
-    key = "earth_shield_tank",
+    key = "earth_shield_any_one",
     category = "targeted_buffs",
     mode = "targeted",
     label = "Earth Shield",
     auraSpellID = 974,
     icon = 136089,
     providers = { classes = { "SHAMAN" } },
-    target = { type = "role", role = "TANK" },
+    target = { type = "any_one", excludePlayer = true },
     onlyIfProviderPresent = true,
     requirements = {
       talentSpellIDs = {
@@ -387,9 +401,14 @@ local REMINDER_RULES = {
     label = "Pet Summoned",
     auraSpellID = nil,
     icon = 132599,
-    providers = { classes = { "HUNTER", "WARLOCK", "DEATHKNIGHT", "MAGE" } },
+    providers = { classes = { "HUNTER", "WARLOCK", "DEATHKNIGHT" } },
     target = { type = "pet_exists" },
     onlyIfProviderPresent = false,
+    requirements = {
+      missingTalentSpellIDs = {
+        466867,
+      },
+    },
   }
 }
 
@@ -398,6 +417,7 @@ local defaults = {
   onlyPlayer = true,
   highlightOwn = true,
   highlightStyle = "blizzard",
+  growth = "center",
   iconSize = 40,
   spacing = 8,
   alpha = 1,
@@ -649,11 +669,14 @@ local function ResolveTargetUnit(rule, roles)
   return nil
 end
 
-local function HasAuraOnAnyUnit(units, spellId, auraName)
+local function HasAuraOnAnyUnit(units, spellId, auraName, options)
+  local excludePlayer = options and options.excludePlayer
   for _, unit in ipairs(units or {}) do
     if UnitExists(unit) and not UnitIsDeadOrGhost(unit) then
-      if HasBuff(unit, spellId, auraName) then
-        return true
+      if not (excludePlayer and unit == "player") then
+        if HasBuff(unit, spellId, auraName) then
+          return true
+        end
       end
     end
   end
@@ -679,7 +702,7 @@ end
 local function EvaluateTargetedRule(rule, context)
   local targetType = rule.target and rule.target.type or "self"
   if targetType == "any_one" then
-    return not HasAuraOnAnyUnit(context.units, rule.auraSpellID, context.auraNames[rule.key])
+    return not HasAuraOnAnyUnit(context.units, rule.auraSpellID, context.auraNames[rule.key], rule.target)
   end
 
   local unit = ResolveTargetUnit(rule, context.roles)
@@ -768,12 +791,58 @@ local function EvaluatePetRule(rule)
   return not HasBuff("pet", rule.auraSpellID, GetSpellNameSafe(rule.auraSpellID))
 end
 
+local function RuleRequiresPlayerProvider(rule)
+  if not rule then
+    return false
+  end
+
+  if rule.mode == "pet" or rule.mode == "weapon_enchant" then
+    return true
+  end
+
+  local targetType = rule.target and rule.target.type
+  return targetType == "self"
+end
+
+local function IsMythicPlusRunActive()
+  if C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive and C_ChallengeMode.IsChallengeModeActive() then
+    return true
+  end
+
+  local currentRunID = C_MythicPlus and C_MythicPlus.GetCurrentRunID and C_MythicPlus.GetCurrentRunID()
+  return type(currentRunID) == "number" and currentRunID > 0
+end
+
+local function IsRestrictedBuffCheckContext()
+  return (InCombatLockdown and InCombatLockdown()) or IsMythicPlusRunActive()
+end
+
+local function IsSpellGlowActive(spellID)
+  if type(spellID) ~= "number" or spellID <= 0 then
+    return false
+  end
+
+  if IsSpellOverlayed and IsSpellOverlayed(spellID) then
+    return true
+  end
+
+  if C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed and C_SpellActivationOverlay.IsSpellOverlayed(spellID) then
+    return true
+  end
+
+  return false
+end
+
 local function ShouldEvaluateRule(rule, context)
   if not rule.auraSpellID and rule.mode ~= "pet" and rule.mode ~= "weapon_enchant" then
     return false
   end
 
   if rule.onlyIfProviderPresent and not IsProviderPresent(rule, context.classes) then
+    return false
+  end
+
+  if RuleRequiresPlayerProvider(rule) and not RuleAppliesToPlayer(rule, context.playerClass) then
     return false
   end
 
@@ -812,8 +881,129 @@ local function EvaluateRule(rule, context)
   return false
 end
 
+local function ShouldEvaluateRestrictedRule(rule, context)
+  if not (rule and rule.restrictedGlowFallback) then
+    return false
+  end
+
+  if rule.mode ~= "raid" then
+    return false
+  end
+
+  if not RuleAppliesToPlayer(rule, context.playerClass) then
+    return false
+  end
+
+  if not PlayerMeetsRequirements(rule) then
+    return false
+  end
+
+  return true
+end
+
+local function EvaluateRestrictedRule(rule, context)
+  if not ShouldEvaluateRestrictedRule(rule, context) then
+    return false
+  end
+
+  return IsSpellGlowActive(rule.castSpellID or rule.auraSpellID)
+end
+
+local function StopHighlightAnimation(icon)
+  if not icon then
+    return
+  end
+  icon.highlightAnimMode = nil
+  icon.highlightAnimPhase = 0
+  if icon:GetScript("OnUpdate") then
+    icon:SetScript("OnUpdate", nil)
+  end
+end
+
+local function HideAutoCastHighlight(icon)
+  if not icon then
+    return
+  end
+  StopHighlightAnimation(icon)
+  if icon.autoCast then
+    icon.autoCast:Hide()
+  end
+end
+
+local function HideProcHighlight(icon)
+  if not icon then
+    return
+  end
+  StopHighlightAnimation(icon)
+  if icon.proc then
+    icon.proc:Hide()
+  end
+end
+
+local function StartHighlightAnimation(icon, mode, size)
+  if not icon then
+    return
+  end
+  icon.highlightAnimMode = mode
+  icon.highlightAnimPhase = icon.highlightAnimPhase or 0
+  icon:SetScript("OnUpdate", function(self, elapsed)
+    self.highlightAnimPhase = ((self.highlightAnimPhase or 0) + elapsed * 3) % (math.pi * 2)
+    local wave = (math.sin(self.highlightAnimPhase) + 1) * 0.5
+    if self.highlightAnimMode == "autocast" and self.autoCast then
+      local base = size * 1.95
+      local scale = 1 + (wave * 0.12)
+      local alpha = 0.55 + (wave * 0.35)
+      self.autoCast:SetSize(base * scale, base * scale)
+      self.autoCast:SetAlpha(alpha)
+    elseif self.highlightAnimMode == "proc" and self.proc then
+      local scale = 1.6 + (wave * 0.45)
+      local alpha = 0.45 + (wave * 0.55)
+      self.proc:SetSize(size * scale, size * scale)
+      self.proc:SetAlpha(alpha)
+    end
+  end)
+end
+
+local function ShowAutoCastHighlight(icon, size)
+  if not icon or not icon.autoCast then
+    return
+  end
+  icon.autoCast:SetPoint("CENTER", icon, "CENTER", 0, 0)
+  icon.autoCast:SetSize(size * 1.95, size * 1.95)
+  icon.autoCast:SetAlpha(0.85)
+  icon.autoCast:Show()
+  StartHighlightAnimation(icon, "autocast", size)
+end
+
+local function ShowProcHighlight(icon, size)
+  if not icon or not icon.proc then
+    return
+  end
+  icon.proc:SetPoint("CENTER", icon, "CENTER", 0, 0)
+  icon.proc:SetSize(size * 1.9, size * 1.9)
+  icon.proc:SetAlpha(0.95)
+  icon.proc:Show()
+  StartHighlightAnimation(icon, "proc", size)
+end
+
+local function HideHighlightEffects(icon)
+  if not icon then
+    return
+  end
+  HideAutoCastHighlight(icon)
+  HideProcHighlight(icon)
+  if icon.pixel then
+    for _, t in pairs(icon.pixel) do
+      t:Hide()
+    end
+  end
+  if icon.border then
+    icon.border:Hide()
+  end
+end
+
 local function CreateIcon(parent)
-  local f = CreateFrame("Frame", nil, parent)
+  local f = CreateFrame("Button", nil, parent)
   f:SetSize(32, 32)
   f.tex = f:CreateTexture(nil, "ARTWORK")
   f.tex:SetAllPoints()
@@ -834,6 +1024,14 @@ local function CreateIcon(parent)
     t:SetColorTexture(1, 1, 0.4, 1)
     t:Hide()
   end
+  f.autoCast = f:CreateTexture(nil, "OVERLAY")
+  f.autoCast:SetTexture("Interface\\Buttons\\UI-AutoCastableOverlay")
+  f.autoCast:SetBlendMode("ADD")
+  f.autoCast:Hide()
+  f.proc = f:CreateTexture(nil, "OVERLAY")
+  f.proc:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+  f.proc:SetBlendMode("ADD")
+  f.proc:Hide()
   f.badgeBG = f:CreateTexture(nil, "OVERLAY")
   f.badgeBG:SetColorTexture(0.05, 0.05, 0.05, 0.85)
   f.badgeBG:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
@@ -939,13 +1137,10 @@ function M:UpdateDisplay()
     self:ClearIcons()
     return
   end
-  if InCombatLockdown and InCombatLockdown() then
-    self:ClearIcons()
-    return
-  end
 
   local _, playerClass = UnitClass("player")
   local units, classes, roles = BuildGroupSnapshot()
+  local restrictedContext = IsRestrictedBuffCheckContext()
   local context = {
     db = db,
     units = units,
@@ -953,15 +1148,27 @@ function M:UpdateDisplay()
     roles = roles,
     playerClass = playerClass,
     auraNames = {},
+    restricted = restrictedContext,
   }
 
-  for _, rule in ipairs(REMINDER_RULES) do
-    context.auraNames[rule.key] = GetSpellNameSafe(rule.auraSpellID)
+  if not restrictedContext then
+    for _, rule in ipairs(REMINDER_RULES) do
+      context.auraNames[rule.key] = GetSpellNameSafe(rule.auraSpellID)
+    end
   end
 
   local missing = {}
   for _, rule in ipairs(REMINDER_RULES) do
-    if db.rulesEnabled[rule.key] ~= false and EvaluateRule(rule, context) then
+    local isMissing = false
+    if db.rulesEnabled[rule.key] ~= false then
+      if restrictedContext then
+        isMissing = EvaluateRestrictedRule(rule, context)
+      else
+        isMissing = EvaluateRule(rule, context)
+      end
+    end
+
+    if isMissing then
       local own = db.highlightOwn and RuleAppliesToPlayer(rule, playerClass)
       missing[#missing + 1] = {
         key = rule.key,
@@ -988,7 +1195,15 @@ function M:UpdateDisplay()
     local size = self.iconSize
     icon:SetSize(size, size)
     local total = (#missing * size) + ((#missing - 1) * self.spacing)
-    local x = (i - 1) * (size + self.spacing) - (total / 2) + (size / 2)
+    local growth = db.growth or "center"
+    local x
+    if growth == "right" then
+      x = (i - 1) * (size + self.spacing)
+    elseif growth == "left" then
+      x = -((i - 1) * (size + self.spacing))
+    else
+      x = (i - 1) * (size + self.spacing) - (total / 2) + (size / 2)
+    end
     icon:ClearAllPoints()
     icon:SetPoint("CENTER", self.frame, "CENTER", x, 0)
     icon.tex:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
@@ -1009,7 +1224,12 @@ function M:UpdateDisplay()
       icon.badge:SetText("")
     end
 
+    if style == "blizzard" then
+      style = "proc"
+    end
+
     if entry.highlight and style ~= "none" then
+      HideHighlightEffects(icon)
       if style == "pixel" then
         local thick = math.max(1, math.floor(size / 16))
         icon.pixel.top:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
@@ -1027,19 +1247,19 @@ function M:UpdateDisplay()
         for _, t in pairs(icon.pixel) do
           t:Show()
         end
-        icon.border:Hide()
+      elseif style == "autocast" then
+        ShowAutoCastHighlight(icon, size)
+      elseif style == "border" then
+        icon.border:SetSize(size * 1.55, size * 1.55)
+        icon.border:Show()
+      elseif style == "proc" then
+        ShowProcHighlight(icon, size)
       else
         icon.border:SetSize(size * 2.2, size * 2.2)
         icon.border:Show()
-        for _, t in pairs(icon.pixel) do
-          t:Hide()
-        end
       end
     else
-      icon.border:Hide()
-      for _, t in pairs(icon.pixel) do
-        t:Hide()
-      end
+      HideHighlightEffects(icon)
     end
 
     icon:Show()
@@ -1067,9 +1287,18 @@ function M:GetOptions()
     { type = "toggle", key = "highlightOwn", label = L.HIGHLIGHT_MY_BUFFS },
     { type = "select", key = "highlightStyle", label = L.HIGHLIGHT_STYLE,
       values = {
-        { "blizzard", L.HIGHLIGHT_STYLE_BLIZZARD },
         { "pixel", L.HIGHLIGHT_STYLE_PIXEL },
+        { "autocast", L.HIGHLIGHT_STYLE_AUTOCAST or "AutoCast" },
+        { "border", L.HIGHLIGHT_STYLE_BORDER or "Border" },
+        { "proc", L.HIGHLIGHT_STYLE_PROC or "Proc" },
         { "none", L.HIGHLIGHT_STYLE_NONE },
+      }
+    },
+    { type = "select", key = "growth", label = L.GROWTH_DIRECTION or "Growth direction",
+      values = {
+        { "left", L.GROWTH_LEFT or "Left" },
+        { "center", L.GROWTH_CENTER or "Center" },
+        { "right", L.GROWTH_RIGHT or "Right" },
       }
     },
     { type = "number", key = "iconSize", label = L.ICON_SIZE, min = 12, max = 64, step = 1 },

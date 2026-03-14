@@ -58,7 +58,7 @@ local function applyDefaults(db)
   DB:ApplyDefaults(db, defaults)
 end
 
-local PET_CLASS_LIST = { "HUNTER", "WARLOCK", "DEATHKNIGHT", "MAGE" }
+local PET_CLASS_LIST = { "HUNTER", "WARLOCK", "DEATHKNIGHT" }
 local PET_CLASS_SET = {}
 for _, c in ipairs(PET_CLASS_LIST) do PET_CLASS_SET[c] = true end
 

@@ -1,3 +1,16 @@
+## v0.3.2
+### Fixes
+- Earth shield (non personal version) is now searched on anyone in the group but the shaman instead of the tank only
+- Fix a filter issue when "only my buff" is unticked
+- Add a new fallback when in combat/MM+ : when raid buff are glowing, they are displayed as missing
+- Added new way of highlight my own buffs
+- Pet alert no longer search a pet for mages
+- Pet alert no longer search pet for MM Hunters
+
+### New feature
+- Group check
+  - Group check allow you to have an additional window when joining a group or raid containing ilvls and buff coverage
+
 ## v0.3.1
 - Adding 12.0.5 version as available for this addon
 - Revamped buff check module

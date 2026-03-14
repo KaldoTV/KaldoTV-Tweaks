@@ -17,6 +17,7 @@ modules/equipment_info.lua
 modules/craft_order_received.lua
 modules/pet_alert.lua
 modules/buff_check.lua
+modules/group_ready.lua
 modules/mm_keys.lua
 modules/auto_macros.lua
 modules/auto_potion.lua
