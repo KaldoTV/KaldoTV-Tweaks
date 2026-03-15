@@ -848,6 +848,14 @@ local function IsRestrictedBuffCheckContext()
   return (InCombatLockdown and InCombatLockdown()) or IsMythicPlusRunActive()
 end
 
+local function IsPvPInstance()
+  if not GetInstanceInfo then
+    return false
+  end
+  local _, instanceType = GetInstanceInfo()
+  return instanceType == "pvp" or instanceType == "arena"
+end
+
 local function IsSpellGlowActive(spellID)
   if type(spellID) ~= "number" or spellID <= 0 then
     return false
@@ -1165,6 +1173,10 @@ end
 function M:UpdateDisplay()
   local db = self.db or self:EnsureDB()
   if not db.enabled then
+    self:ClearIcons()
+    return
+  end
+  if IsPvPInstance() then
     self:ClearIcons()
     return
   end

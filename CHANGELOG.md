@@ -1,3 +1,13 @@
+## v0.3.4
+### Fixes
+- Disable most of the buff check during Battleground because of secret values in auras
+
+## v0.3.3
+### Fixes
+- Added a security to prevent MM+ module to read chat during encounters
+  (MM+, combat mode, BG)
+- Enhance buff detection
+
 ## v0.3.2
 ### Fixes
 - Earth shield (non personal version) is now searched on anyone in the group but the shaman instead of the tank only
