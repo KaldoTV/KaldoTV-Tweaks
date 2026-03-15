@@ -313,7 +313,7 @@ local REMINDER_RULES = {
     label = "Flametongue Weapon",
     icon = 135814,
     providers = { classes = { "SHAMAN" } },
-    target = { type = "offhand" },
+    target = { type = "offhand", "mainhand" },
     weaponEnchantIDs = {
       5400
     },
@@ -356,6 +356,9 @@ local REMINDER_RULES = {
     requirements = {
       talentSpellIDs = {
         445033,
+      },
+      missingTalentSpellIDs = {
+        187880,
       },
     },
     onlyIfProviderPresent = true,
@@ -574,6 +577,12 @@ local function PlayerMeetsRequirements(rule)
     if IsSpellKnown and IsSpellKnown(spellID) then
       return true
     end
+    if FindSpellBookSlotBySpellID and FindSpellBookSlotBySpellID(spellID) then
+      return true
+    end
+    if C_SpellBook and C_SpellBook.FindSpellBookSlotForSpell and C_SpellBook.FindSpellBookSlotForSpell(spellID) then
+      return true
+    end
     return false
   end
 
@@ -786,27 +795,65 @@ end
 
 local function EvaluateWeaponEnchantRule(rule)
   local state = GetWeaponEnchantState()
-  local targetType = rule.target and rule.target.type or "mainhand"
   local expectedEnchantIDs = rule.weaponEnchantIDs
+  local target = rule.target or {}
 
-  if targetType == "mainhand" then
-    return not (state.mainhand and IsExpectedWeaponEnchant(state.mainhandEnchantID, expectedEnchantIDs))
-  end
-  if targetType == "offhand" then
-    return not (state.offhand and IsExpectedWeaponEnchant(state.offhandEnchantID, expectedEnchantIDs))
-  end
-  if targetType == "either" then
-    local mainhandOK = state.mainhand and IsExpectedWeaponEnchant(state.mainhandEnchantID, expectedEnchantIDs)
-    local offhandOK = state.offhand and IsExpectedWeaponEnchant(state.offhandEnchantID, expectedEnchantIDs)
-    return not (mainhandOK or offhandOK)
-  end
-  if targetType == "both" then
-    local mainhandOK = state.mainhand and IsExpectedWeaponEnchant(state.mainhandEnchantID, expectedEnchantIDs)
-    local offhandOK = state.offhand and IsExpectedWeaponEnchant(state.offhandEnchantID, expectedEnchantIDs)
-    return not (mainhandOK and offhandOK)
+  local function collectTargetTypes()
+    local out = {}
+    local seen = {}
+
+    local function addTargetType(value)
+      if type(value) ~= "string" or value == "" or seen[value] then
+        return
+      end
+      seen[value] = true
+      out[#out + 1] = value
+    end
+
+    addTargetType(target.type)
+    if type(target.types) == "table" then
+      for _, value in ipairs(target.types) do
+        addTargetType(value)
+      end
+    end
+    for _, value in ipairs(target) do
+      addTargetType(value)
+    end
+
+    if #out == 0 then
+      out[1] = "mainhand"
+    end
+    return out
   end
 
-  return false
+  local function isTargetTypeSatisfied(targetType)
+    if targetType == "mainhand" then
+      return state.mainhand and IsExpectedWeaponEnchant(state.mainhandEnchantID, expectedEnchantIDs)
+    end
+    if targetType == "offhand" then
+      return state.offhand and IsExpectedWeaponEnchant(state.offhandEnchantID, expectedEnchantIDs)
+    end
+    if targetType == "either" then
+      local mainhandOK = state.mainhand and IsExpectedWeaponEnchant(state.mainhandEnchantID, expectedEnchantIDs)
+      local offhandOK = state.offhand and IsExpectedWeaponEnchant(state.offhandEnchantID, expectedEnchantIDs)
+      return mainhandOK or offhandOK
+    end
+    if targetType == "both" then
+      local mainhandOK = state.mainhand and IsExpectedWeaponEnchant(state.mainhandEnchantID, expectedEnchantIDs)
+      local offhandOK = state.offhand and IsExpectedWeaponEnchant(state.offhandEnchantID, expectedEnchantIDs)
+      return mainhandOK and offhandOK
+    end
+    return false
+  end
+
+  local targetTypes = collectTargetTypes()
+  for _, targetType in ipairs(targetTypes) do
+    if isTargetTypeSatisfied(targetType) then
+      return false
+    end
+  end
+
+  return true
 end
 
 local function EvaluatePetRule(rule)

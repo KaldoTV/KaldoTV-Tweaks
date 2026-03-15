@@ -1,3 +1,8 @@
+## V0.3.5
+### Fixes
+- Shaman : Flametongue enchantment is now searched in both main hand (Elemental) and off hand (Enhancement)
+- Shaman : Tidecaller's guaard is no longer indicated as missing on Enhancement spec, as it's a passive spell
+
 ## v0.3.4
 ### Fixes
 - Disable most of the buff check during Battleground because of secret values in auras
