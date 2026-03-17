@@ -428,6 +428,15 @@ local defaults = {
   y = 200,
 }
 
+local function HasEligibleNonPlayerUnit(units, options)
+  for _, unit in ipairs(units or {}) do
+    if unit ~= "player" and IsUnitEligibleForBuffCheck(unit, options) then
+      return true
+    end
+  end
+  return false
+end
+
 local function applyDefaults(db)
   DB:ApplyDefaults(db, defaults)
 end
@@ -738,6 +747,9 @@ end
 local function EvaluateTargetedRule(rule, context)
   local targetType = rule.target and rule.target.type or "self"
   if targetType == "any_one" then
+    if not HasEligibleNonPlayerUnit(context.units, rule.target) then
+      return false
+    end
     local found, eligibleCount = HasAuraOnAnyUnit(context.units, rule.auraSpellID, context.auraNames[rule.key], rule.target)
     if eligibleCount == 0 then
       return false

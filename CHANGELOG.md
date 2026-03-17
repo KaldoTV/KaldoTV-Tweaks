@@ -1,3 +1,7 @@
+## v0.3.6
+### Fixes
+- Buff checks : Now check if any valid target is on range
+
 ## V0.3.5
 ### Fixes
 - Shaman : Flametongue enchantment is now searched in both main hand (Elemental) and off hand (Enhancement)
