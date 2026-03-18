@@ -428,14 +428,6 @@ local defaults = {
   y = 200,
 }
 
-local function HasEligibleNonPlayerUnit(units, options)
-  for _, unit in ipairs(units or {}) do
-    if unit ~= "player" and IsUnitEligibleForBuffCheck(unit, options) then
-      return true
-    end
-  end
-  return false
-end
 
 local function applyDefaults(db)
   DB:ApplyDefaults(db, defaults)
@@ -741,6 +733,16 @@ local function EvaluateRaidRule(rule, context)
     return false
   end
 
+  return false
+end
+
+
+local function HasEligibleNonPlayerUnit(units, options)
+  for _, unit in ipairs(units or {}) do
+    if unit ~= "player" and IsUnitEligibleForBuffCheck(unit, options) then
+      return true
+    end
+  end
   return false
 end
 
