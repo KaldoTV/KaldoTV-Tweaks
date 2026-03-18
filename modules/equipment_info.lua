@@ -8,7 +8,7 @@ local DB = NS.DB
 local M = {}
 local TIP_NAME = "KaldoTVScanTooltip"
 local TIP_TEXTLEFT_PREFIX = TIP_NAME .. "TextLeft"
-local ILVL_DEFAULTS_CHECKPOINT = "12.0.1_prepatch"
+local ILVL_DEFAULTS_CHECKPOINT = "12.0.1_season1"
 
 M.events = {
   "PLAYER_LOGIN",
@@ -32,14 +32,9 @@ local defaults = {
   enchants_display = 2, -- 1 only missing, 2 missing+low, 3 all
   show_inspect = false,
   show_inspect_avg = true,
-  -- Midnight S1
-  --low_ilvl = 259,
-  --medium_ilvl = 272,
-  --high_ilvl = 285,
-
-  low_ilvl = 233,
-  medium_ilvl = 246,
-  high_ilvl = 259,
+  low_ilvl = 259,
+  medium_ilvl = 272,
+  high_ilvl = 285,
 
   -- colors (rgba)
   color_low   = {1, 0, 0, 1},
@@ -354,7 +349,42 @@ local function getCharacterDefaultAvgText()
   return nil
 end
 
-local function styleAvgText(fs, fontPath, fontSize)
+local styleAvgText
+
+local function setManagedAvgText(fs, text, fontPath, fontSize)
+  if not fs then return end
+  if not fs._kaldoManaged then
+    hooksecurefunc(fs, "SetText", function(frame, newText)
+      if frame._kaldoApplyingText then return end
+      if not frame._kaldoDesiredText or frame._kaldoDesiredText == "" then return end
+      if newText == frame._kaldoDesiredText then return end
+      frame._kaldoApplyingText = true
+      frame:SetText(frame._kaldoDesiredText)
+      frame._kaldoApplyingText = nil
+    end)
+    fs:HookScript("OnShow", function(frame)
+      if frame._kaldoDesiredText and frame._kaldoDesiredText ~= "" then
+        frame._kaldoApplyingText = true
+        frame:SetText(frame._kaldoDesiredText)
+        frame._kaldoApplyingText = nil
+      end
+    end)
+    fs._kaldoManaged = true
+  end
+  fs._kaldoDesiredText = text
+  styleAvgText(fs, fontPath, fontSize)
+  fs._kaldoApplyingText = true
+  fs:SetText(text or "")
+  fs._kaldoApplyingText = nil
+  fs:SetAlpha(1)
+  if text and text ~= "" then
+    fs:Show()
+  else
+    fs:Hide()
+  end
+end
+
+styleAvgText = function(fs, fontPath, fontSize)
   if not fs then return end
   fs:SetFont(fontPath or "Fonts\\FRIZQT__.TTF", fontSize or 18, "OUTLINE")
   fs:SetShadowColor(0, 0, 0, 1)
@@ -773,8 +803,12 @@ function M:UpdateDisplay()
   if CharacterFrame and CharacterFrame:IsShown() then
     self:UpdateDisplayFor("player", slots, self.fontsIL, self.fontsEN)
     local playerAvg = getAverageItemLevelForSlots(self, "player", slots)
+    if (not playerAvg or playerAvg <= 0) and GetAverageItemLevel then
+      local equipped, avg = GetAverageItemLevel()
+      playerAvg = equipped or avg or playerAvg
+    end
+    local defaultAvgText = getCharacterDefaultAvgText()
     if not self.characterAvgText then
-      local defaultAvgText = getCharacterDefaultAvgText()
       self.characterAvgText = CharacterFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
       self.characterAvgText:SetDrawLayer("OVERLAY", 7)
       if defaultAvgText then
@@ -785,29 +819,30 @@ function M:UpdateDisplay()
         self.characterAvgText:SetPoint("TOPRIGHT", CharacterFrame, "TOPRIGHT", -135, -86)
       end
     end
-    styleAvgText(self.characterAvgText, db.font_family, math.max(18, db.font_size_ilvl + 2))
+    local avgFontSize = math.max(18, db.font_size_ilvl + 2)
     if playerAvg and playerAvg > 0 then
       local avgColored = string.format("%s%.1f|r", ilvlColor(db, playerAvg), playerAvg)
-      local defaultAvgText = getCharacterDefaultAvgText()
       if defaultAvgText then
-        styleAvgText(defaultAvgText, db.font_family, math.max(18, db.font_size_ilvl + 2))
-        defaultAvgText:SetText(avgColored)
-        defaultAvgText:Show()
+        setManagedAvgText(defaultAvgText, avgColored, db.font_family, avgFontSize)
         self.characterAvgText:Hide()
       else
+        styleAvgText(self.characterAvgText, db.font_family, avgFontSize)
         self.characterAvgText:SetText(avgColored)
         self.characterAvgText:Show()
       end
     else
-      local defaultAvgText = getCharacterDefaultAvgText()
-      if defaultAvgText then defaultAvgText:Hide() end
+      if defaultAvgText then
+        setManagedAvgText(defaultAvgText, "", db.font_family, avgFontSize)
+      end
       if self.characterAvgText then self.characterAvgText:Hide() end
     end
   else
     self:ClearFonts(self.fontsIL, self.fontsEN, #slots)
     if self.characterAvgText then self.characterAvgText:Hide() end
     local defaultAvgText = getCharacterDefaultAvgText()
-    if defaultAvgText then defaultAvgText:Hide() end
+    if defaultAvgText then
+      setManagedAvgText(defaultAvgText, "", db.font_family, math.max(18, db.font_size_ilvl + 2))
+    end
   end
 
   if db.show_inspect and InspectFrame and InspectFrame:IsShown() then
