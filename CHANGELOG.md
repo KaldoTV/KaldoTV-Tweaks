@@ -1,3 +1,18 @@
+## v0.3.9
+### Fix
+- Equipment info enchant rank detection is now based on enchant IDs instead of volatile tooltip names/text
+
+## v0.3.8
+### Fix
+- Prevent blizzard updating the average player ilvl
+
+### Update
+- Update all ilvl treshold for Equipment info to Midnight Season 1
+
+## v0.3.7
+### Fixes
+- Fix range check looping on errors
+
 ## v0.3.6
 ### Fixes
 - Buff checks : Now check if any valid target is on range

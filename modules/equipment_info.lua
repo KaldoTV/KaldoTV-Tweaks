@@ -73,6 +73,50 @@ local function applyIlvlDefaultsCheckpoint(db)
   db.ilvl_defaults_checkpoint = ILVL_DEFAULTS_CHECKPOINT
 end
 
+local function makeIdSet(ids)
+  local set = {}
+  for _, id in ipairs(ids) do
+    set[id] = true
+  end
+  return set
+end
+
+local LOW_RANK_ENCHANT_IDS = makeIdSet({
+  7934, 7936, 7938, 7948, 7956, 7958, 7960, 7962, 7964, 7966, 7968,
+  7970, 7972, 7974, 7976, 7978, 7980, 7982, 7984, 7986, 7988, 7990,
+  7992, 7994, 7996, 7998, 8000, 8002, 8004, 8006, 8008, 8010, 8012,
+  8014, 8016, 8018, 8020, 8022, 8024, 8026, 8028, 8030, 8032, 8034,
+  8036, 8038, 8040, 8158, 8160, 8162, 8612, 8614,
+})
+
+local MAX_RANK_ENCHANT_IDS = makeIdSet({
+  7935, 7937, 7939, 7949, 7957, 7959, 7961, 7963, 7965, 7967, 7969,
+  7971, 7973, 7975, 7977, 7979, 7981, 7983, 7985, 7987, 7989, 7991,
+  7993, 7995, 7997, 7999, 8001, 8003, 8005, 8007, 8009, 8011, 8013,
+  8015, 8017, 8019, 8021, 8023, 8025, 8027, 8029, 8031, 8033, 8035,
+  8037, 8039, 8041, 8159, 8161, 8163, 8613, 8615,
+})
+
+local function getItemEnchantId(link)
+  if type(link) ~= "string" then return nil end
+  local enchantId = link:match("item:%-?%d+:(%-?%d+)")
+  return enchantId and tonumber(enchantId) or nil
+end
+
+local function isLowRankEnchant(link)
+  local enchantId = getItemEnchantId(link)
+  if enchantId == nil then
+    return nil
+  end
+  if LOW_RANK_ENCHANT_IDS[enchantId] then
+    return true
+  end
+  if MAX_RANK_ENCHANT_IDS[enchantId] then
+    return false
+  end
+  return nil
+end
+
 local slots = {
   { id=1,  frame="CharacterHeadSlot" },
   { id=2,  frame="CharacterNeckSlot" },
@@ -651,9 +695,9 @@ function M:GetEnchantDisplayText(db, slotId, unit, link, itemType, itemSubtype, 
     return ""
   end
 
-  local isTier3 = enchantLine:find("Professions%-ChatIcon%-Quality%-Tier3")
-  local color = isTier3 and "|cFF00FF00" or "|cFFFFFF00"
-  if db.enchants_display == 3 or (db.enchants_display == 2 and not isTier3) then
+  local isLowRank = isLowRankEnchant(link)
+  local color = isLowRank and "|cFFFFFF00" or "|cFF00FF00"
+  if db.enchants_display == 3 or (db.enchants_display == 2 and isLowRank) then
     return color .. wrapped .. "|r"
   end
 
