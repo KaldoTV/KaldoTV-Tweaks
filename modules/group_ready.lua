@@ -4,7 +4,7 @@ local L = NS.L
 local DB = NS.DB
 
 local M = {}
-M.displayName = (L and L.GROUP_READY) or "Group Ready"
+M.displayName = (L and L.GROUP_READY) or "Group Checks"
 M.events = {
   "PLAYER_LOGIN",
   "GROUP_ROSTER_UPDATE",
@@ -23,8 +23,8 @@ local BUFF_SUMMARY_RULES = {
   { label = "Mark of the Wild", icon = 136078, providers = { "DRUID" } },
   { label = "Power Word: Fortitude", icon = 135987, providers = { "PRIEST" } },
   { label = "Skyfury", icon = 4630367, providers = { "SHAMAN" } },
-  { label = "Bloodlust", icon = 136012, providers = { "MAGE", "SHAMAN", "EVOKER", "HUNTER" } },
-  { label = "Combat Resurrection", icon = 136080, providers = { "DRUID", "DEATHKNIGHT", "WARLOCK", "PALADIN" } },
+  { label = "Bloodlust", icon = 136012, providers = { "MAGE", "SHAMAN", "EVOKER", "HUNTER" }, critical = true, shortLabel = "BL" },
+  { label = "Combat Resurrection", icon = 136080, providers = { "DRUID", "DEATHKNIGHT", "WARLOCK", "PALADIN" }, critical = true, shortLabel = "BR" },
 }
 
 local defaults = {
@@ -146,6 +146,15 @@ local function GetClassColor(unit)
   return 1, 1, 1
 end
 
+local function GetPlayerEquippedItemLevel()
+  if not GetAverageItemLevel then return nil end
+  local avgItemLevel, avgEquipped = GetAverageItemLevel()
+  if avgEquipped and avgEquipped > 0 then
+    return avgEquipped
+  end
+  return avgItemLevel
+end
+
 local function CreateBackdropFrame(name, parent)
   local frame = CreateFrame("Frame", name, parent, "BackdropTemplate")
   frame:SetBackdrop({
@@ -244,32 +253,32 @@ function M:CreateFrame()
   end)
 
   frame.buffHeader = CreateFrame("Frame", nil, frame)
-  frame.buffHeader:SetSize(328, 24)
+  frame.buffHeader:SetSize(328, 32)
   frame.buffHeader:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -48)
   frame.buffIcons = {}
 
   frame.summary = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  frame.summary:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -78)
+  frame.summary:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -86)
   frame.summary:SetJustifyH("LEFT")
   frame.summary:SetText("")
 
   frame.headerRole = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  frame.headerRole:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -104)
+  frame.headerRole:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -112)
   frame.headerRole:SetText((L and L.GROUP_READY_ROLE) or "Role")
 
   frame.headerName = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  frame.headerName:SetPoint("TOPLEFT", frame, "TOPLEFT", 62, -104)
+  frame.headerName:SetPoint("TOPLEFT", frame, "TOPLEFT", 62, -112)
   frame.headerName:SetText((L and L.GROUP_READY_NAME) or "Name")
 
   frame.headerIlvl = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  frame.headerIlvl:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -50, -104)
+  frame.headerIlvl:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -50, -112)
   frame.headerIlvl:SetText((L and L.GROUP_READY_ILVL) or "iLvl")
 
   frame.rows = {}
   for i = 1, 5 do
     local row = CreateFrame("Frame", nil, frame)
     row:SetSize(328, 20)
-    row:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -122 - ((i - 1) * 22))
+    row:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -130 - ((i - 1) * 22))
 
     row.bg = row:CreateTexture(nil, "BACKGROUND")
     row.bg:SetAllPoints()
@@ -402,8 +411,7 @@ function M:GetGroupAverageIlvl()
   for _, unit in ipairs(units) do
     if UnitExists(unit) then
       if UnitIsUnit and UnitIsUnit(unit, "player") then
-        local equipped, avg = GetAverageItemLevel and GetAverageItemLevel()
-        local ilvl = equipped or avg
+        local ilvl = GetPlayerEquippedItemLevel()
         if ilvl and ilvl > 0 then
           total = total + ilvl
           inspected = inspected + 1
@@ -433,7 +441,7 @@ function M:UpdateLayout()
 
   local compact = IsCompactMode()
   if compact then
-    self.frame:SetSize(360, 104)
+    self.frame:SetSize(360, 112)
     self.frame.headerRole:Hide()
     self.frame.headerName:Hide()
     self.frame.headerIlvl:Hide()
@@ -441,7 +449,7 @@ function M:UpdateLayout()
       row:Hide()
     end
   else
-    self.frame:SetSize(360, 236)
+    self.frame:SetSize(360, 244)
     self.frame.headerRole:Show()
     self.frame.headerName:Show()
     self.frame.headerIlvl:Show()
@@ -455,8 +463,6 @@ function M:UpdateBuffSummary()
     local icon = self.frame.buffIcons[i]
     if not icon then
       icon = CreateFrame("Frame", nil, self.frame.buffHeader)
-      icon:SetSize(22, 22)
-      icon:SetPoint("LEFT", self.frame.buffHeader, "LEFT", (i - 1) * 26, 0)
       icon.tex = icon:CreateTexture(nil, "ARTWORK")
       icon.tex:SetAllPoints()
       icon.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -465,8 +471,24 @@ function M:UpdateBuffSummary()
       icon.border:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
       icon.border:SetBlendMode("ADD")
       icon.border:SetPoint("CENTER", icon, "CENTER", 0, 0)
-      icon.border:SetSize(36, 36)
+      icon.label = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+      icon.label:SetPoint("TOP", icon, "BOTTOM", 0, -1)
       self.frame.buffIcons[i] = icon
+    end
+
+    icon:ClearAllPoints()
+    if rule.critical then
+      local criticalIndex = (rule.shortLabel == "BL") and 0 or 1
+      icon:SetSize(28, 28)
+      icon:SetPoint("LEFT", self.frame.buffHeader, "LEFT", 214 + (criticalIndex * 42), 0)
+      icon.border:SetSize(46, 46)
+      icon.label:SetText(rule.shortLabel or "")
+      icon.label:Show()
+    else
+      icon:SetSize(24, 24)
+      icon:SetPoint("LEFT", self.frame.buffHeader, "LEFT", (i - 1) * 28, 2)
+      icon.border:SetSize(38, 38)
+      icon.label:Hide()
     end
 
     local covered = HasCoverage(rule, classes)
@@ -511,8 +533,7 @@ function M:UpdateRows()
       row.name:SetTextColor(GetClassColor(info.unit))
 
       if info.isPlayer then
-        local equipped, avg = GetAverageItemLevel and GetAverageItemLevel()
-        local ilvl = equipped or avg
+        local ilvl = GetPlayerEquippedItemLevel()
         if ilvl and ilvl > 0 then
           row.ilvl:SetFormattedText("%.1f", ilvl)
         else

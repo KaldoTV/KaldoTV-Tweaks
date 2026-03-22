@@ -81,20 +81,18 @@ local function makeIdSet(ids)
   return set
 end
 
-local LOW_RANK_ENCHANT_IDS = makeIdSet({
-  7934, 7936, 7938, 7948, 7956, 7958, 7960, 7962, 7964, 7966, 7968,
-  7970, 7972, 7974, 7976, 7978, 7980, 7982, 7984, 7986, 7988, 7990,
-  7992, 7994, 7996, 7998, 8000, 8002, 8004, 8006, 8008, 8010, 8012,
-  8014, 8016, 8018, 8020, 8022, 8024, 8026, 8028, 8030, 8032, 8034,
-  8036, 8038, 8040, 8158, 8160, 8162, 8612, 8614,
-})
-
 local MAX_RANK_ENCHANT_IDS = makeIdSet({
   7935, 7937, 7939, 7949, 7957, 7959, 7961, 7963, 7965, 7967, 7969,
   7971, 7973, 7975, 7977, 7979, 7981, 7983, 7985, 7987, 7989, 7991,
   7993, 7995, 7997, 7999, 8001, 8003, 8005, 8007, 8009, 8011, 8013,
   8015, 8017, 8019, 8021, 8023, 8025, 8027, 8029, 8031, 8033, 8035,
   8037, 8039, 8041, 8159, 8161, 8163, 8613, 8615,
+})
+
+local MAX_RANK_GEM_IDS = makeIdSet({
+  240906, 240904, 240908, 240888, 240912, 240892, 240890, 240916,
+  240914, 240896, 240910, 240900, 240894, 240898, 240967, 240918,
+  240902, 240971, 240969, 240983, 241142, 241143, 241144
 })
 
 local function getItemEnchantId(link)
@@ -108,13 +106,74 @@ local function isLowRankEnchant(link)
   if enchantId == nil then
     return nil
   end
-  if LOW_RANK_ENCHANT_IDS[enchantId] then
-    return true
-  end
   if MAX_RANK_ENCHANT_IDS[enchantId] then
     return false
   end
+  return true
+end
+
+local function getItemIdFromLink(link)
+  if type(link) ~= "string" then return nil end
+  local itemId = link:match("item:(%-?%d+)")
+  return itemId and tonumber(itemId) or nil
+end
+
+local function findQualityTierInTooltipInfo(info)
+  if type(info) ~= "table" or type(info.lines) ~= "table" then
+    return nil
+  end
+
+  local function scanValue(value)
+    if type(value) == "string" then
+      local tier = value:match("Professions%-ChatIcon%-Quality%-Tier(%d)")
+      if tier then
+        return tonumber(tier)
+      end
+    elseif type(value) == "table" then
+      for _, nested in pairs(value) do
+        local tier = scanValue(nested)
+        if tier then
+          return tier
+        end
+      end
+    end
+    return nil
+  end
+
+  for _, line in ipairs(info.lines) do
+    local tier = scanValue(line)
+    if tier then
+      return tier
+    end
+  end
+
   return nil
+end
+
+local function isLowRankGem(link)
+  local itemId = getItemIdFromLink(link)
+  if itemId and MAX_RANK_GEM_IDS[itemId] then
+    return false
+  end
+
+  if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+    local info = C_TooltipInfo.GetHyperlink(link)
+    local tier = findQualityTierInTooltipInfo(info)
+    if tier then
+      return tier < 3
+    end
+  end
+
+  return true
+end
+
+local function getEquippedAverageItemLevel()
+  if not GetAverageItemLevel then return nil end
+  local avgItemLevel, avgEquipped = GetAverageItemLevel()
+  if avgEquipped and avgEquipped > 0 then
+    return avgEquipped
+  end
+  return avgItemLevel
 end
 
 local slots = {
@@ -631,13 +690,14 @@ function M:GetSocketDisplayText(unit, db, slotId, link)
     lines[#lines + 1] = "|cFFFF0000" .. L.MISSING_SOCKETS .. "|r"
   end
 
-  local hasR3Gems, missingGems, gemCount = true, false, 0
+  local hasMaxRankGems, missingGems, gemCount = true, false, 0
   if totalSockets >= 1 then
     for gemid = 1, totalSockets do
-      local _, socketedGem = GetItemGem(link, gemid)
-      if socketedGem then
-        if not socketedGem:find("Professions%-ChatIcon%-Quality%-Tier3") then
-          hasR3Gems = false
+      local _, socketedGemLink = GetItemGem(link, gemid)
+      if socketedGemLink then
+        local isLowRank = isLowRankGem(socketedGemLink)
+        if isLowRank == true then
+          hasMaxRankGems = false
         end
       else
         missingGems = true
@@ -649,7 +709,7 @@ function M:GetSocketDisplayText(unit, db, slotId, link)
   if gemCount < totalSockets or missingGems then
     lines[#lines + 1] = "|cFFFF0000" .. L.EMPTY_SOCKETS .. "|r"
   end
-  if not hasR3Gems then
+  if not hasMaxRankGems then
     lines[#lines + 1] = "|cFFFFFF00" .. L.LOW_QUALITY_GEMS .. "|r"
   end
 
@@ -846,10 +906,9 @@ function M:UpdateDisplay()
 
   if CharacterFrame and CharacterFrame:IsShown() then
     self:UpdateDisplayFor("player", slots, self.fontsIL, self.fontsEN)
-    local playerAvg = getAverageItemLevelForSlots(self, "player", slots)
-    if (not playerAvg or playerAvg <= 0) and GetAverageItemLevel then
-      local equipped, avg = GetAverageItemLevel()
-      playerAvg = equipped or avg or playerAvg
+    local playerAvg = getEquippedAverageItemLevel()
+    if not playerAvg or playerAvg <= 0 then
+      playerAvg = getAverageItemLevelForSlots(self, "player", slots)
     end
     local defaultAvgText = getCharacterDefaultAvgText()
     if not self.characterAvgText then

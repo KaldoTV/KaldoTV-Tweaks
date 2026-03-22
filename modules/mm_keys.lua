@@ -109,8 +109,19 @@ end
 
 local function isKeysCommand(msg)
   if shouldSuppressKeysChat() then return end
+  if type(msg) ~= "string" then return false end
+  if msg:find("|", 1, true) or msg:find("[%c\r\n]") then
+    return false
+  end
   msg = normalizeMsg(msg)
+  if not msg or #msg > 5 then
+    return false
+  end
   return msg == "!key" or msg == "!keys"
+end
+
+local function isTrustedKeysSender(author)
+  return type(author) == "string" and author ~= ""
 end
 
 function M:GetOptions()
@@ -132,6 +143,7 @@ function M:OnRegister()
   self._pendingAcceptedGroupData = nil
   self._pendingAcceptedAt = 0
   self._lastReminder = 0
+  self._lastKeysResponseAt = 0
 end
 
 function M:OnOptionChanged()
@@ -396,6 +408,11 @@ function M:RespondKeys(event)
   if IsInRaid and IsInRaid() then return end
   if shouldSuppressKeysChat() then return end
 
+  local now = GetTime and GetTime() or 0
+  if (now - (self._lastKeysResponseAt or 0)) < 1.5 then
+    return
+  end
+
   local channel
   if event == "CHAT_MSG_PARTY" or event == "CHAT_MSG_PARTY_LEADER" then
     channel = "PARTY"
@@ -406,10 +423,12 @@ function M:RespondKeys(event)
 
   local link = getOwnedKeystoneLink()
   if not link then
+    self._lastKeysResponseAt = now
     SendChatMessage((L and L.MM_KEYS_NONE) or "[Kaldo Tweaks] No keystone.", channel)
     return
   end
 
+  self._lastKeysResponseAt = now
   SendChatMessage("[Kaldo Tweaks] " .. link, channel)
 end
 
@@ -485,8 +504,8 @@ function M:OnEvent(event, ...)
     if shouldSuppressKeysChat() then
       return
     end
-    local msg = ...
-    if isKeysCommand(msg) then
+    local msg, author = ...
+    if isTrustedKeysSender(author) and isKeysCommand(msg) then
       self:RespondKeys(event)
     end
   end
