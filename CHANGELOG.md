@@ -1,3 +1,11 @@
+v0.4.0
+
+New Features
+- MM Keys: added a custom overlay on Mythic+ season-best dungeon tiles
+- MM Keys: each tile can now display a dungeon acronym, best key level, score gained, and run timer
+- MM Keys: added configurable font family and size options for acronym, level, score, and timer in `/kaldo`
+
+
 v0.3.10
 
 Fixes
