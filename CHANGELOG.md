@@ -1,3 +1,7 @@
+v0.4.1
+Fixes
+- Pet presence is no longer checked in frost or blood specialization for DK
+
 v0.4.0
 
 New Features

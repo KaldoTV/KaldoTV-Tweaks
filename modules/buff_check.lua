@@ -408,6 +408,9 @@ local REMINDER_RULES = {
     target = { type = "pet_exists" },
     onlyIfProviderPresent = false,
     requirements = {
+      specIDs = {
+        252,
+      },
       missingTalentSpellIDs = {
         466867,
       },
@@ -568,6 +571,33 @@ local function PlayerMeetsRequirements(rule)
     return true
   end
 
+  local function playerMatchesAnySpec(specIDs)
+    if type(specIDs) ~= "table" or #specIDs == 0 then
+      return true
+    end
+    if not (GetSpecialization and GetSpecializationInfo) then
+      return false
+    end
+
+    local specIndex = GetSpecialization()
+    if not specIndex then
+      return false
+    end
+
+    local currentSpecID = select(1, GetSpecializationInfo(specIndex))
+    if not currentSpecID then
+      return false
+    end
+
+    for _, specID in ipairs(specIDs) do
+      if specID == currentSpecID then
+        return true
+      end
+    end
+
+    return false
+  end
+
   local function playerKnowsRequirementSpell(spellID)
     if type(spellID) ~= "number" or spellID <= 0 then
       return false
@@ -602,6 +632,11 @@ local function PlayerMeetsRequirements(rule)
 
     local nodeInfo = C_Traits.GetNodeInfo(configID, nodeID)
     return nodeInfo and nodeInfo.activeRank and nodeInfo.activeRank > 0 or false
+  end
+
+  local specIDs = requirements.specIDs
+  if not playerMatchesAnySpec(specIDs) then
+    return false
   end
 
   local talentSpellIDs = requirements.talentSpellIDs
