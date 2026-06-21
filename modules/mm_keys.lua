@@ -7,6 +7,7 @@ local DB = NS.DB
 local M = {}
 local tryHookChallengesFrame
 local ensureChallengesUILoaded
+local ensureRealmLanguageHooks
 local isLikelySeasonBestButton
 local isLikelySeasonBestFallbackButton
 M.displayName = (L and L.MM_KEYS) or "MM+ Keys"
@@ -62,6 +63,8 @@ local defaults = {
   enabled = false,
   auto_insert = true,
   respond_keys = true,
+  show_realm_language_chat = false,
+  show_realm_language_group = false,
   accept_reminder_chat = true,
   accept_reminder_screen = false,
   season_best_overlay = true,
@@ -76,6 +79,197 @@ local defaults = {
   score_size = 11,
   timer_font = DEFAULT_OVERLAY_FONT,
   timer_size = 10,
+}
+
+local REALM_LANGUAGE_COLORS = {
+  EN = "cffd8dee9",
+  FR = "cff318ce7",
+  DE = "cffdd4b39",
+  ES = "cffffb86c",
+  IT = "cff50fa7b",
+}
+
+local REALM_LANGUAGES = {
+  -- English
+  aeriepeak = "EN",
+  agamaggan = "EN",
+  alakir = "EN",
+  alonsus = "EN",
+  anachronos = "EN",
+  arathor = "EN",
+  argentdawn = "EN",
+  aszune = "EN",
+  auchindoun = "EN",
+  azjolnerub = "EN",
+  bladesedge = "EN",
+  bladefist = "EN",
+  bloodfeather = "EN",
+  bloodhoof = "EN",
+  bronzedragonflight = "EN",
+  burningblade = "EN",
+  burninglegion = "EN",
+  chamberofaspects = "EN",
+  darkmoonfaire = "EN",
+  darksorrow = "EN",
+  darkspear = "EN",
+  deathwing = "EN",
+  defiasbrotherhood = "EN",
+  dentarg = "EN",
+  doomhammer = "EN",
+  draenor = "EN",
+  dragonblight = "EN",
+  emeraldream = "EN",
+  emeriss = "EN",
+  eonar = "EN",
+  executus = "EN",
+  frostmane = "EN",
+  grimbatol = "EN",
+  hakkar = "EN",
+  hellfire = "EN",
+  jaedenar = "EN",
+  kazzak = "EN",
+  kilrogg = "EN",
+  korgall = "EN",
+  laughingskull = "EN",
+  lightbringer = "EN",
+  lightningsblade = "EN",
+  magtheridon = "EN",
+  mazrigos = "EN",
+  moonglade = "EN",
+  nordrassil = "EN",
+  outland = "EN",
+  quelthalas = "EN",
+  ragnaros = "EN",
+  ravencrest = "EN",
+  ravenholdt = "EN",
+  runetotem = "EN",
+  shadowsong = "EN",
+  shatteredhalls = "EN",
+  silvermoon = "EN",
+  skullcrusher = "EN",
+  sporeggar = "EN",
+  steamwheedlecartel = "EN",
+  stormrage = "EN",
+  stormreaver = "EN",
+  sunstrider = "EN",
+  sylvanas = "EN",
+  talnivarr = "EN",
+  tarrenmill = "EN",
+  themaelstrom = "EN",
+  theshatar = "EN",
+  thunderhorn = "EN",
+  turalyon = "EN",
+  twistingnether = "EN",
+  vashj = "EN",
+  veknilash = "EN",
+  wildhammer = "EN",
+  xavius = "EN",
+  zenedar = "EN",
+
+  -- French
+  archimonde = "FR",
+  chantseternels = "FR",
+  confrerieduthorium = "FR",
+  dalaran = "FR",
+  eitrigg = "FR",
+  elune = "FR",
+  garona = "FR",
+  hyjal = "FR",
+  illidan = "FR",
+  kaelthas = "FR",
+  khazmodan = "FR",
+  kirintor = "FR",
+  krasus = "FR",
+  lacroisadeecarlate = "FR",
+  lesclairvoyants = "FR",
+  lessentinelles = "FR",
+  marecagedezangar = "FR",
+  medivh = "FR",
+  naxxramas = "FR",
+  rashgarroth = "FR",
+  sargeras = "FR",
+  sinstralis = "FR",
+  suramar = "FR",
+  templenoir = "FR",
+  throkferoth = "FR",
+  uldaman = "FR",
+  voljin = "FR",
+  ysondre = "FR",
+
+  -- German
+  aegwynn = "DE",
+  amanthul = "DE",
+  antonidas = "DE",
+  anubarak = "DE",
+  area52 = "DE",
+  arthas = "DE",
+  azshara = "DE",
+  blackhand = "DE",
+  blackmoore = "DE",
+  blutkessel = "DE",
+  daskonsortium = "DE",
+  dassyndikat = "DE",
+  dermithrilorden = "DE",
+  derratvondalaran = "DE",
+  destromath = "DE",
+  dethecus = "DE",
+  diealdor = "DE",
+  diearguswacht = "DE",
+  dieewigewacht = "DE",
+  dienachtwache = "DE",
+  durotan = "DE",
+  eredar = "DE",
+  frostmourne = "DE",
+  frostwolf = "DE",
+  garrosh = "DE",
+  gilneas = "DE",
+  guldan = "DE",
+  kelthuzad = "DE",
+  khazgoroth = "DE",
+  kiljaeden = "DE",
+  kragjin = "DE",
+  kultderverdammten = "DE",
+  madmortem = "DE",
+  malganis = "DE",
+  malorne = "DE",
+  malygos = "DE",
+  mannoroth = "DE",
+  nazjatar = "DE",
+  nefarian = "DE",
+  nethersturm = "DE",
+  nozdormu = "DE",
+  onyxia = "DE",
+  proudmoore = "DE",
+  rexxar = "DE",
+  senjin = "DE",
+  shattrath = "DE",
+  taerar = "DE",
+  teldrassil = "DE",
+  terrordar = "DE",
+  theradras = "DE",
+  tirion = "DE",
+  todeswache = "DE",
+  ungoro = "DE",
+  veklor = "DE",
+  wrathbringer = "DE",
+  ysera = "DE",
+  zuluhed = "DE",
+
+  -- Spanish
+  cthun = "ES",
+  dunmodr = "ES",
+  exodar = "ES",
+  loserrantes = "ES",
+  minahonda = "ES",
+  sanguino = "ES",
+  shendralar = "ES",
+  tyrande = "ES",
+  uldum = "ES",
+  zuljin = "ES",
+
+  -- Italian
+  nemesis = "IT",
+  pozzodelleternita = "IT",
 }
 
 local function applyDefaults(db)
@@ -120,6 +314,71 @@ local function normalizeMsg(msg)
   return msg
 end
 
+local function normalizeRealmName(realm)
+  if type(realm) ~= "string" or realm == "" then return nil end
+  realm = realm:lower()
+  realm = realm:gsub("À", "a"):gsub("Á", "a"):gsub("Â", "a"):gsub("Ä", "a")
+  realm = realm:gsub("Ç", "c")
+  realm = realm:gsub("È", "e"):gsub("É", "e"):gsub("Ê", "e"):gsub("Ë", "e")
+  realm = realm:gsub("Î", "i"):gsub("Ï", "i")
+  realm = realm:gsub("Ô", "o"):gsub("Ö", "o")
+  realm = realm:gsub("Ù", "u"):gsub("Û", "u"):gsub("Ü", "u")
+  realm = realm:gsub("à", "a"):gsub("á", "a"):gsub("â", "a"):gsub("ä", "a")
+  realm = realm:gsub("ç", "c")
+  realm = realm:gsub("è", "e"):gsub("é", "e"):gsub("ê", "e"):gsub("ë", "e")
+  realm = realm:gsub("î", "i"):gsub("ï", "i")
+  realm = realm:gsub("ô", "o"):gsub("ö", "o")
+  realm = realm:gsub("ù", "u"):gsub("û", "u"):gsub("ü", "u")
+  realm = realm:gsub("[%s%-%'’%.]", "")
+  return realm ~= "" and realm or nil
+end
+
+local function getRealmLanguage(realm)
+  local key = normalizeRealmName(realm)
+  if not key then return nil end
+  return REALM_LANGUAGES[key]
+end
+
+local function getCurrentRealmLanguage()
+  if GetNormalizedRealmName then
+    local code = getRealmLanguage(GetNormalizedRealmName())
+    if code then return code end
+  end
+  if GetRealmName then
+    return getRealmLanguage(GetRealmName())
+  end
+  return nil
+end
+
+local function getLanguageBadge(code)
+  if type(code) ~= "string" or code == "" then return nil end
+  local color = REALM_LANGUAGE_COLORS[code] or "cffffffff"
+  return string.format("|%s[%s]|r", color, code)
+end
+
+local function getUnitRealmLanguage(unit)
+  if not (unit and UnitName) then return nil end
+  local _, realm = UnitName(unit)
+  if not realm or realm == "" then
+    return getCurrentRealmLanguage()
+  end
+  return getRealmLanguage(realm)
+end
+
+local function getAuthorRealmLanguage(author)
+  if type(author) ~= "string" or author == "" then return nil end
+  local realm = author:match("%-([^%-]+)$")
+  if not realm or realm == "" then
+    return getCurrentRealmLanguage()
+  end
+  return getRealmLanguage(realm)
+end
+
+local function isRealmLanguageEnabled(key)
+  local db = M.db or M:EnsureDB()
+  return db and db.enabled and db[key]
+end
+
 local function shouldSuppressKeysChat()
   if InCombatLockdown and InCombatLockdown() then
     return true
@@ -144,6 +403,19 @@ local function shouldSuppressKeysChat()
   return false
 end
 
+local function shouldSkipRealmLanguageFrameUpdates()
+  if InCombatLockdown and InCombatLockdown() then
+    return true
+  end
+
+  if C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive and C_ChallengeMode.IsChallengeModeActive() then
+    return true
+  end
+
+  local currentRunID = C_MythicPlus.GetCurrentRunID and C_MythicPlus.GetCurrentRunID()
+  return not not currentRunID
+end
+
 local function isKeysCommand(msg)
   if shouldSuppressKeysChat() then return end
   if type(msg) ~= "string" then return false end
@@ -166,6 +438,8 @@ function M:GetOptions()
     { type="header", text=self.displayName },
     { type="toggle", key="auto_insert", label=(L and L.MM_KEYS_AUTO_INSERT) or "Auto insert keystone on frame open" },
     { type="toggle", key="respond_keys", label=(L and L.MM_KEYS_RESPOND) or "Respond to !key/!keys" },
+    { type="toggle", key="show_realm_language_chat", label=(L and L.MM_KEYS_REALM_LANGUAGE_CHAT) or "Show realm language in chat" },
+    { type="toggle", key="show_realm_language_group", label=(L and L.MM_KEYS_REALM_LANGUAGE_GROUP) or "Show realm language on group frames" },
     { type="header", text=(L and L.MM_KEYS_SEASON_OVERLAY_HEADER) or "Season best overlay" },
     { type="toggle", key="season_best_overlay", label=(L and L.MM_KEYS_SEASON_OVERLAY_ENABLED) or "Show overlay on dungeon tiles" },
     { type="label", text=(L and L.MM_KEYS_LEVEL_RULES_HINT) or "Level colors are configured in modules/mm_keys.lua" },
@@ -198,11 +472,16 @@ function M:OnRegister()
   self._lastKeysResponseAt = 0
   self._seasonBestOverlays = {}
   self._seasonBestTickerElapsed = 0
+  self._realmLanguageChatHooked = false
+  self._realmLanguageFrameHooked = false
+  ensureRealmLanguageHooks(self)
 end
 
 function M:OnOptionChanged()
   self.db = self:EnsureDB()
   tryHookChallengesFrame(self)
+  ensureRealmLanguageHooks(self)
+  self:RefreshGroupRealmLanguages()
   self:RefreshSeasonBestOverlays()
 end
 
@@ -957,6 +1236,103 @@ tryHookChallengesFrame = function(self)
   self._seasonBestUpdater = updater
 end
 
+local function rewriteLanguageChatMessage(_, _, msg, author, ...)
+  if not isRealmLanguageEnabled("show_realm_language_chat") then
+    return false
+  end
+
+  if type(msg) ~= "string" or msg == "" then
+    return false
+  end
+  local badge = getLanguageBadge(getAuthorRealmLanguage(author))
+  if not badge then
+    return false
+  end
+  if msg:find(badge, 1, true) then
+    return false
+  end
+
+  return false, badge .. " " .. msg, author, ...
+end
+
+local function languageChatFilter(...)
+  if shouldSuppressKeysChat() then
+    return false
+  end
+  return rewriteLanguageChatMessage(...)
+end
+
+local function scanFrameTree(frame, callback, visited)
+  if type(frame) ~= "table" or type(callback) ~= "function" then return end
+  visited = visited or {}
+  if visited[frame] then return end
+  visited[frame] = true
+  callback(frame)
+  if frame.GetChildren then
+    for _, child in ipairs({ frame:GetChildren() }) do
+      scanFrameTree(child, callback, visited)
+    end
+  end
+end
+
+function M:UpdateGroupFrameRealmLanguage(frame, forceReset)
+  if shouldSkipRealmLanguageFrameUpdates() then return end
+  if type(frame) ~= "table" or not frame.unit or not frame.name then return end
+  if frame.IsForbidden and frame:IsForbidden() then return end
+  if not frame.name.SetText then return end
+
+  local unit = frame.unit
+  local name = UnitName and UnitName(unit)
+  if type(name) ~= "string" or name == "" then return end
+
+  if not isRealmLanguageEnabled("show_realm_language_group") then
+    if forceReset then
+      frame.name:SetText(name)
+    end
+    return
+  end
+
+  local badge = getLanguageBadge(getUnitRealmLanguage(unit))
+  if badge then
+    frame.name:SetText(badge .. " " .. name)
+  else
+    frame.name:SetText(name)
+  end
+end
+
+function M:RefreshGroupRealmLanguages()
+  if shouldSkipRealmLanguageFrameUpdates() then return end
+  local roots = {
+    CompactPartyFrame,
+    CompactRaidFrameContainer,
+    CompactRaidFrameManager,
+  }
+  for _, root in ipairs(roots) do
+    scanFrameTree(root, function(frame)
+      self:UpdateGroupFrameRealmLanguage(frame, true)
+    end)
+  end
+end
+
+ensureRealmLanguageHooks = function(self)
+  if (not self._realmLanguageChatHooked) and ChatFrame_AddMessageEventFilter then
+    self._realmLanguageChatHooked = true
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_PARTY", languageChatFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_PARTY_LEADER", languageChatFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID", languageChatFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_RAID_LEADER", languageChatFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_INSTANCE_CHAT", languageChatFilter)
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_INSTANCE_CHAT_LEADER", languageChatFilter)
+  end
+
+  if (not self._realmLanguageFrameHooked) and hooksecurefunc and CompactUnitFrame_UpdateName then
+    self._realmLanguageFrameHooked = true
+    hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
+      M:UpdateGroupFrameRealmLanguage(frame)
+    end)
+  end
+end
+
 
 function M:RespondKeys(event)
   local db = self.db or self:EnsureDB()
@@ -992,6 +1368,8 @@ function M:OnEvent(event, ...)
   if event == "PLAYER_LOGIN" then
     self.db = self:EnsureDB()
     tryHookChallengesFrame(self)
+    ensureRealmLanguageHooks(self)
+    self:RefreshGroupRealmLanguages()
     self._wasInGroup = IsInGroup and IsInGroup() or false
     return
   end
@@ -1000,6 +1378,10 @@ function M:OnEvent(event, ...)
     local addon = ...
     if addon == "Blizzard_ChallengesUI" then
       tryHookChallengesFrame(self)
+    end
+    if addon == "Blizzard_CompactRaidFrames" then
+      ensureRealmLanguageHooks(self)
+      self:RefreshGroupRealmLanguages()
     end
     return
   end
@@ -1010,6 +1392,7 @@ function M:OnEvent(event, ...)
     or event == "PARTY_LEADER_CHANGED"
     or event == "PLAYER_SPECIALIZATION_CHANGED" then
     self:CheckGroupJoinReminder()
+    self:RefreshGroupRealmLanguages()
     return
   end
 

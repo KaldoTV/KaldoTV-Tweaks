@@ -8,7 +8,7 @@ local DB = NS.DB
 local M = {}
 local TIP_NAME = "KaldoTVScanTooltip"
 local TIP_TEXTLEFT_PREFIX = TIP_NAME .. "TextLeft"
-local ILVL_DEFAULTS_CHECKPOINT = "12.0.1_season1"
+local ILVL_DEFAULTS_CHECKPOINT = "12.0.7-1"
 
 M.events = {
   "PLAYER_LOGIN",
@@ -32,9 +32,9 @@ local defaults = {
   enchants_display = 2, -- 1 only missing, 2 missing+low, 3 all
   show_inspect = false,
   show_inspect_avg = true,
-  low_ilvl = 259,
-  medium_ilvl = 272,
-  high_ilvl = 285,
+  low_ilvl = 271,
+  medium_ilvl = 284,
+  high_ilvl = 294,
 
   -- colors (rgba)
   color_low   = {1, 0, 0, 1},

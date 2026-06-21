@@ -1,3 +1,8 @@
+v0.4.2
+- Bump TOC version
+- New options : MM+ > See realm language on chat or frames
+- Update ilvl tresholds according to 12.0.7
+
 v0.4.1
 Fixes
 - Pet presence is no longer checked in frost or blood specialization for DK
