@@ -1,3 +1,8 @@
+v0.4.3
+Fixes
+- Removed the MM+ realm-language chat and group-frame feature
+- Fixed repeated MMKeys errors caused by scanning protected group-frame children
+
 v0.4.2
 - Bump TOC version
 - New options : MM+ > See realm language on chat or frames
