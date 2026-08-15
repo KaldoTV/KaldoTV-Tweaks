@@ -1,4 +1,4 @@
-## Interface: 120001, 120005, 120007
+## Interface: 120100
 ## Title: Kaldo Tweaks
 ## Notes: Small tweaks for Blizz UI made by KaldoTV
 ## Author: KaldoTV

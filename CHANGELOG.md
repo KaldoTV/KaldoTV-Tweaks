@@ -1,3 +1,8 @@
+v0.5.0
+Updates
+- Bump TOC to 11.1.0
+- Update ilvl tresholds
+
 v0.4.3
 Fixes
 - Removed the MM+ realm-language chat and group-frame feature
