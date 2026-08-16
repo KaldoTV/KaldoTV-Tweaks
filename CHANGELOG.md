@@ -1,3 +1,13 @@
+v0.5.1
+
+New Features
+- Auto Macros: added smart support for the Thalassian Master Repair Hammer
+- Creates a `KaldoRepair` macro based on your real Midnight Blacksmithing specialization ranks
+- Optional merchant auto-repair can now skip equipped slots that your hammer can repair for free
+
+Fixes
+- Improved equipped item repair detection when Blizzard returns partial durability data
+
 v0.5.0
 Updates
 - Bump TOC to 11.1.0
