@@ -39,6 +39,17 @@ local KEYSTONE_ITEM_IDS = {
 
 -- Fill this table with your preferred dungeon acronyms keyed by mapChallengeModeID.
 local DUNGEON_ACRONYMS = {
+  -- Midnight Season 2
+  [249] = "KR",
+  [250] = "TOS",
+  [399] = "RLP",
+  [584] = "BV",
+  [585] = "VSA",
+  [586] = "DON",
+  [587] = "MR",
+  [588] = "AOF",
+
+  -- Midnight Season 1
   [402] = "AA",
   [556] = "POS",
   [558] = "MT",

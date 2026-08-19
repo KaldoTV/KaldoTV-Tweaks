@@ -1,3 +1,8 @@
+v0.5.2
+
+Updates
+- MM Keys: updated dungeon acronyms for Midnight Season 2
+
 v0.5.1
 
 New Features
