@@ -13,6 +13,7 @@ text_alert.lua
 macro_utils.lua
 core.lua
 ui.lua
+data/mm_percentiles.lua
 modules/equipment_info.lua
 modules/craft_order_received.lua
 modules/pet_alert.lua

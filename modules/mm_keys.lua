@@ -9,6 +9,7 @@ local tryHookChallengesFrame
 local ensureChallengesUILoaded
 local isLikelySeasonBestButton
 local isLikelySeasonBestFallbackButton
+local refreshScorePercentileOverlay
 M.displayName = (L and L.MM_KEYS) or "MM+ Keys"
 M.events = {
   "PLAYER_LOGIN",
@@ -18,6 +19,7 @@ M.events = {
   "PLAYER_ROLES_ASSIGNED",
   "PARTY_LEADER_CHANGED",
   "PLAYER_SPECIALIZATION_CHANGED",
+  "PLAYER_REGEN_ENABLED",
   "LFG_PROPOSAL_SUCCEEDED",
   "LFG_LIST_APPLICATION_STATUS_UPDATED",
   "LFG_LIST_JOINED_GROUP",
@@ -60,6 +62,28 @@ local DUNGEON_ACRONYMS = {
   [239] = "SEAT",
 }
 
+local DUNGEON_TELEPORT_SPELLS = {
+  -- Midnight Season 2
+  [249] = 1286831, -- King's Rest
+  [250] = 1286828, -- Temple of Sethraliss
+  [399] = 393256, -- Ruby Life Pools
+  [584] = 1286801, -- The Blinding Vale
+  [585] = 1286804, -- Voidscar Arena
+  [586] = 1286807, -- Den of Nalorakk
+  [587] = 1286809, -- Murder Row
+  [588] = 1286812, -- Altar of Fangs
+
+  -- Midnight Season 1
+  [161] = 159898, -- Skyreach
+  [239] = 1254551, -- Seat of the Triumvirate
+  [402] = 393273, -- Algeth'ar Academy
+  [556] = 1254555, -- Pit of Saron
+  [557] = 1254400, -- Windrunner Spire
+  [558] = 1254572, -- Magisters' Terrace
+  [559] = 1254563, -- Nexus-Point Xenas
+  [560] = 1254559, -- Maisara Caverns
+}
+
 -- Edit these rules directly in code. Highest matching minLevel wins.
 local KEY_LEVEL_COLOR_RULES = {
   { minLevel = 12, color = { 0.85, 0.60, 1.00, 1.00 } },
@@ -76,6 +100,7 @@ local defaults = {
   accept_reminder_chat = true,
   accept_reminder_screen = false,
   season_best_overlay = true,
+  score_percentiles = true,
   score_color = { 1.00, 0.82, 0.00, 1.00 },
   timer_color_in_time = { 0.82, 0.92, 1.00, 1.00 },
   timer_color_over_time = { 1.00, 0.43, 0.43, 1.00 },
@@ -88,6 +113,55 @@ local defaults = {
   timer_font = DEFAULT_OVERLAY_FONT,
   timer_size = 10,
 }
+
+local BUILTIN_MM_PERCENTILES = {
+  source = "Raider.IO fallback",
+  season = "season-mn-2",
+  regions = {
+    eu = {
+      points = {
+        { score = 3178, topPercent = 0.100 },
+        { score = 3005, topPercent = 1.000 },
+        { score = 2915, topPercent = 2.100 },
+        { score = 2676, topPercent = 10.000 },
+        { score = 2558, topPercent = 18.700 },
+        { score = 2368, topPercent = 25.000 },
+        { score = 2199, topPercent = 31.200 },
+        { score = 1898, topPercent = 40.000 },
+        { score = 1475, topPercent = 49.900 },
+        { score = 1238, topPercent = 56.200 },
+        { score = 999, topPercent = 62.300 },
+        { score = 0, topPercent = 100.000 },
+      },
+    },
+    world = {
+      points = {
+        { score = 3178, topPercent = 0.100 },
+        { score = 3005, topPercent = 0.741 },
+        { score = 2915, topPercent = 1.566 },
+        { score = 2824, topPercent = 3.865 },
+        { score = 2676, topPercent = 7.849 },
+        { score = 2642, topPercent = 10.148 },
+        { score = 2619, topPercent = 11.628 },
+        { score = 2558, topPercent = 15.094 },
+        { score = 2368, topPercent = 21.040 },
+        { score = 2199, topPercent = 26.865 },
+        { score = 1898, topPercent = 35.500 },
+        { score = 1680, topPercent = 40.487 },
+        { score = 1475, topPercent = 45.954 },
+        { score = 1237, topPercent = 52.680 },
+        { score = 999, topPercent = 59.204 },
+        { score = 0, topPercent = 100.000 },
+      },
+    },
+  },
+}
+
+local function chatLine(message)
+  if DEFAULT_CHAT_FRAME then
+    DEFAULT_CHAT_FRAME:AddMessage("|cff7fd1ffKaldo Tweaks:|r " .. tostring(message))
+  end
+end
 
 local function applyDefaults(db)
   DB:ApplyDefaults(db, defaults)
@@ -179,6 +253,7 @@ function M:GetOptions()
     { type="toggle", key="respond_keys", label=(L and L.MM_KEYS_RESPOND) or "Respond to !key/!keys" },
     { type="header", text=(L and L.MM_KEYS_SEASON_OVERLAY_HEADER) or "Season best overlay" },
     { type="toggle", key="season_best_overlay", label=(L and L.MM_KEYS_SEASON_OVERLAY_ENABLED) or "Show overlay on dungeon tiles" },
+    { type="toggle", key="score_percentiles", label=(L and L.MM_KEYS_SCORE_PERCENTILES) or "Show score percentiles" },
     { type="label", text=(L and L.MM_KEYS_LEVEL_RULES_HINT) or "Level colors are configured in modules/mm_keys.lua" },
     { type="select", key="acronym_font", label=(L and L.MM_KEYS_ACRONYM_FONT) or "Acronym font", values=function() return Kaldo.Media:GetFonts() end },
     { type="number", key="acronym_size", min=8, max=20, step=1, label=(L and L.MM_KEYS_ACRONYM_SIZE) or "Acronym size" },
@@ -208,6 +283,7 @@ function M:OnRegister()
   self._lastReminder = 0
   self._lastKeysResponseAt = 0
   self._seasonBestOverlays = {}
+  self._scorePercentileOverlay = nil
   self._seasonBestTickerElapsed = 0
 end
 
@@ -215,6 +291,7 @@ function M:OnOptionChanged()
   self.db = self:EnsureDB()
   tryHookChallengesFrame(self)
   self:RefreshSeasonBestOverlays()
+  refreshScorePercentileOverlay(self)
 end
 
 local function setFontSize(fs, size, flags)
@@ -315,6 +392,7 @@ end
 
 local function hideBaseTileText(frame, visited)
   if type(frame) ~= "table" then return end
+  if frame.KaldoIsSeasonBestOverlay then return end
   visited = visited or {}
   if visited[frame] then return end
   visited[frame] = true
@@ -339,6 +417,71 @@ local function trimNumber(value)
   local text = string.format("%.1f", tonumber(value) or 0)
   text = text:gsub("%.0$", "")
   return text
+end
+
+local function formatPercentile(value)
+  value = tonumber(value)
+  if not value then return nil end
+  if value < 0.1 then
+    return "<0.1%"
+  end
+  if value < 10 then
+    return string.format("%.1f%%", value)
+  end
+  return string.format("%d%%", math.floor(value + 0.5))
+end
+
+local function interpolatePercentile(points, score)
+  score = tonumber(score)
+  if type(points) ~= "table" or not score or score <= 0 then return nil end
+  if #points == 0 then return nil end
+
+  local first = points[1]
+  if type(first) == "table" and score >= (tonumber(first.score) or 0) then
+    return tonumber(first.topPercent)
+  end
+
+  for i = 1, #points - 1 do
+    local high = points[i]
+    local low = points[i + 1]
+    local highScore = tonumber(high and high.score)
+    local lowScore = tonumber(low and low.score)
+    local highPercent = tonumber(high and high.topPercent)
+    local lowPercent = tonumber(low and low.topPercent)
+    if highScore and lowScore and highPercent and lowPercent and highScore >= score and score >= lowScore then
+      if highScore == lowScore then
+        return highPercent
+      end
+      local ratio = (score - lowScore) / (highScore - lowScore)
+      return lowPercent + ((highPercent - lowPercent) * ratio)
+    end
+  end
+
+  local last = points[#points]
+  return tonumber(last and last.topPercent)
+end
+
+local function getPlayerRegionKey()
+  local regionID = GetCurrentRegion and GetCurrentRegion()
+  if regionID == 1 then return "us" end
+  if regionID == 2 then return "kr" end
+  if regionID == 3 then return "eu" end
+  if regionID == 4 then return "tw" end
+  if regionID == 5 then return "cn" end
+  return "eu"
+end
+
+local function estimateScorePercentiles(score)
+  local data = NS.MMPercentiles or BUILTIN_MM_PERCENTILES
+  if type(data) ~= "table" or type(data.regions) ~= "table" then return nil, nil end
+  local regionData = data.regions[getPlayerRegionKey()]
+  if not regionData then
+    regionData = data.regions.eu
+  end
+  local worldData = data.regions.world
+  local regional = regionData and interpolatePercentile(regionData.points, score) or nil
+  local world = worldData and interpolatePercentile(worldData.points, score) or nil
+  return regional, world
 end
 
 local function formatDurationSeconds(totalSeconds)
@@ -417,6 +560,133 @@ local function getScoreColor(score, fallback)
     return C_ChallengeMode.GetSpecificDungeonScoreRarityColor(score)
   end
   return fallback
+end
+
+local function getSpellName(spellID)
+  if not spellID then return nil end
+  if C_Spell and C_Spell.GetSpellInfo then
+    local info = C_Spell.GetSpellInfo(spellID)
+    if type(info) == "table" and info.name then
+      return info.name
+    end
+  end
+  if GetSpellInfo then
+    local name = GetSpellInfo(spellID)
+    if name then return name end
+  end
+  return nil
+end
+
+local function isTeleportKnown(spellID)
+  if not spellID then return false end
+  if IsSpellKnown then
+    local ok, known = pcall(IsSpellKnown, spellID)
+    if ok and known then return true end
+  end
+  if IsPlayerSpell then
+    local ok, known = pcall(IsPlayerSpell, spellID)
+    if ok and known then return true end
+  end
+  if C_SpellBook and C_SpellBook.IsSpellKnown then
+    local ok, known = pcall(C_SpellBook.IsSpellKnown, spellID)
+    if ok and known then return true end
+  end
+  if C_SpellBook and C_SpellBook.IsSpellInSpellBook then
+    local ok, known = pcall(C_SpellBook.IsSpellInSpellBook, spellID)
+    if ok and known then return true end
+  end
+  return false
+end
+
+local teleportButtonCounter = 0
+
+local function clearTeleportButton(button)
+  if not button or (InCombatLockdown and InCombatLockdown()) then return end
+  button:SetAttribute("type", nil)
+  button:SetAttribute("spell", nil)
+  button:SetAttribute("type1", nil)
+  button:SetAttribute("spell1", nil)
+end
+
+local function hideTeleportButton(button)
+  if not button or (InCombatLockdown and InCombatLockdown()) then return end
+  button:Hide()
+  button:ClearAllPoints()
+  button:EnableMouse(false)
+  clearTeleportButton(button)
+end
+
+local function createTeleportButton(overlay)
+  teleportButtonCounter = teleportButtonCounter + 1
+  local button = CreateFrame("Button", "KaldoMMTeleportButton" .. tostring(teleportButtonCounter), UIParent, "SecureActionButtonTemplate")
+  button.KaldoSeasonBestOverlay = overlay
+  button:SetFrameStrata("DIALOG")
+  button:SetFrameLevel(500)
+  button:RegisterForClicks("AnyUp", "AnyDown")
+  button:EnableMouse(false)
+  button:Hide()
+  return button
+end
+
+local function positionTeleportButton(button, target, shouldShow)
+  if not button then return end
+  if not shouldShow then
+    hideTeleportButton(button)
+    return
+  end
+  if InCombatLockdown and InCombatLockdown() then return end
+  if not (target and target.GetLeft and target.GetRight and target.GetTop and target.GetBottom) then
+    hideTeleportButton(button)
+    return
+  end
+
+  local left, right, top, bottom = target:GetLeft(), target:GetRight(), target:GetTop(), target:GetBottom()
+  if not (left and right and top and bottom) then
+    hideTeleportButton(button)
+    return
+  end
+
+  local parent = button:GetParent() or UIParent
+  local targetScale = (target.GetEffectiveScale and target:GetEffectiveScale()) or 1
+  local parentScale = (parent.GetEffectiveScale and parent:GetEffectiveScale()) or 1
+  if parentScale == 0 then parentScale = 1 end
+
+  button:ClearAllPoints()
+  button:SetPoint("TOPLEFT", parent, "BOTTOMLEFT", left * targetScale / parentScale, top * targetScale / parentScale)
+  button:SetPoint("BOTTOMRIGHT", parent, "BOTTOMLEFT", right * targetScale / parentScale, bottom * targetScale / parentScale)
+  button:SetFrameStrata("DIALOG")
+  button:SetFrameLevel(500)
+  button:EnableMouse(true)
+  button:Show()
+end
+
+local function configureTeleportButton(overlay, mapChallengeModeID)
+  if not overlay then return nil, false end
+  local button = overlay.teleportButton
+  if not button then return nil, false end
+  local spellID = DUNGEON_TELEPORT_SPELLS[tonumber(mapChallengeModeID)]
+  local known = isTeleportKnown(spellID)
+  overlay.KaldoTeleportSpellID = spellID
+  overlay.KaldoTeleportKnown = known
+  overlay.KaldoTeleportName = getSpellName(spellID)
+  button.KaldoTeleportSpellID = spellID
+  button.KaldoTeleportKnown = known
+  button.KaldoTeleportName = overlay.KaldoTeleportName
+
+  if InCombatLockdown and InCombatLockdown() then
+    return spellID, known
+  end
+
+  clearTeleportButton(button)
+
+  if spellID and known then
+    button:SetAttribute("type", "spell")
+    button:SetAttribute("spell", spellID)
+    button:SetAttribute("type1", "spell")
+    button:SetAttribute("spell1", spellID)
+  end
+
+  return spellID, known
 end
 
 isLikelySeasonBestButton = function(frame)
@@ -584,9 +854,12 @@ function M:EnsureSeasonBestOverlay(button)
   hideBaseTileText(button)
 
   local overlay = CreateFrame("Frame", nil, button)
+  overlay.KaldoIsSeasonBestOverlay = true
   overlay:SetAllPoints(button)
   overlay:SetFrameLevel(math.max((button.GetFrameLevel and button:GetFrameLevel() or 0) + 5, 5))
-  overlay:EnableMouse(true)
+  overlay:EnableMouse(false)
+
+  overlay.teleportButton = createTeleportButton(overlay)
 
   overlay.acronym = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   overlay.acronym:SetPoint("TOPLEFT", 4, -4)
@@ -616,6 +889,7 @@ end
 function M:HideSeasonBestOverlays()
   for _, overlay in pairs(self._seasonBestOverlays or {}) do
     overlay:Hide()
+    hideTeleportButton(overlay.teleportButton)
   end
 end
 
@@ -640,8 +914,11 @@ function M:RefreshSeasonBestOverlays()
     local bestRun = mapName and chooseSeasonBestRun(mapChallengeModeID) or nil
 
     if button and mapName and bestRun and bestRun.level and bestRun.level > 0 then
+      hideBaseTileText(button)
       local overlay = self:EnsureSeasonBestOverlay(button)
       overlay:Show()
+      local teleportSpellID, teleportKnown = configureTeleportButton(overlay, mapChallengeModeID)
+      positionTeleportButton(overlay.teleportButton, button, teleportSpellID ~= nil)
 
       applyConfiguredFont(overlay.acronym, db.acronym_font, db.acronym_size, "OUTLINE")
       applyConfiguredFont(overlay.level, db.level_font, db.level_size, "THICKOUTLINE")
@@ -662,8 +939,10 @@ function M:RefreshSeasonBestOverlays()
       end
 
       local timeLimit = getMapTimeLimit(mapChallengeModeID)
-      overlay:SetScript("OnEnter", function(selfFrame)
+      local hoverFrame = overlay.teleportButton or overlay
+      hoverFrame:SetScript("OnEnter", function(selfFrame)
         if not GameTooltip then return end
+        local infoOverlay = selfFrame.KaldoSeasonBestOverlay or overlay
         GameTooltip:SetOwner(selfFrame, "ANCHOR_RIGHT")
         GameTooltip:ClearLines()
         GameTooltip:AddLine(mapName, 1, 1, 1)
@@ -675,23 +954,241 @@ function M:RefreshSeasonBestOverlays()
         else
           GameTooltip:AddLine(((L and L.MM_KEYS_TOOLTIP_TIMER) or "Timer") .. ": " .. formatDurationSeconds(bestRun.durationSec), 0.85, 0.85, 0.85)
         end
+        if teleportSpellID then
+          local teleportName = infoOverlay.KaldoTeleportName or getSpellName(teleportSpellID) or tostring(teleportSpellID)
+          if teleportKnown then
+            GameTooltip:AddLine(string.format((L and L.MM_KEYS_TOOLTIP_TELEPORT_CLICK_FMT) or "Click: %s", teleportName), 0.45, 0.85, 1)
+          else
+            GameTooltip:AddLine(string.format((L and L.MM_KEYS_TOOLTIP_TELEPORT_UNKNOWN_FMT) or "Teleport not learned: %s", teleportName), 0.55, 0.55, 0.55)
+          end
+        end
         GameTooltip:Show()
       end)
-      overlay:SetScript("OnLeave", function()
+      hoverFrame:SetScript("OnLeave", function()
         if GameTooltip then GameTooltip:Hide() end
       end)
 
       active[button] = true
     elseif button and button.KaldoSeasonBestOverlay then
       button.KaldoSeasonBestOverlay:Hide()
+      hideTeleportButton(button.KaldoSeasonBestOverlay.teleportButton)
     end
   end
 
   for button, overlay in pairs(self._seasonBestOverlays or {}) do
     if not active[button] then
       overlay:Hide()
+      hideTeleportButton(overlay.teleportButton)
     end
   end
+end
+
+local function collectFrameCandidates(frame, out, visited, depth)
+  if type(frame) ~= "table" or visited[frame] or depth > 5 then return end
+  visited[frame] = true
+  if frame.IsForbidden and frame:IsForbidden() then return end
+
+  out[#out + 1] = frame
+  if frame.GetChildren then
+    for _, child in ipairs({ frame:GetChildren() }) do
+      collectFrameCandidates(child, out, visited, depth + 1)
+    end
+  end
+end
+
+local function getDungeonScoreText()
+  local scoreText = ChallengesFrame
+    and ChallengesFrame.WeeklyInfo
+    and ChallengesFrame.WeeklyInfo.Child
+    and ChallengesFrame.WeeklyInfo.Child.DungeonScoreInfo
+    and ChallengesFrame.WeeklyInfo.Child.DungeonScoreInfo.Score
+
+  if type(scoreText) == "table"
+    and scoreText.GetObjectType
+    and scoreText:GetObjectType() == "FontString"
+    and not (scoreText.IsForbidden and scoreText:IsForbidden()) then
+    return scoreText
+  end
+  return nil
+end
+
+local function parseDisplayedScore(text)
+  if type(text) ~= "string" then return nil end
+  text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
+  text = text:gsub("|r", "")
+  text = text:gsub(",", "")
+
+  local best
+  for candidate in text:gmatch("%d[%d%s]*") do
+    local compact = candidate:gsub("%s+", "")
+    local score = tonumber(compact)
+    if score and score >= 500 and score <= 5000 and (not best or score > best) then
+      best = score
+    end
+  end
+  return best
+end
+
+local function readDisplayedOverallScore()
+  if not ChallengesFrame then return nil, nil end
+
+  local scoreText = getDungeonScoreText()
+  if scoreText and scoreText.GetText then
+    local score = parseDisplayedScore(scoreText:GetText())
+    if score and score > 0 then
+      return score, scoreText
+    end
+  end
+
+  local frames = {}
+  collectFrameCandidates(ChallengesFrame, frames, {}, 0)
+  local bestScore, bestAnchor = nil, nil
+  for _, frame in ipairs(frames) do
+    if frame.GetRegions then
+      for _, region in ipairs({ frame:GetRegions() }) do
+        if region
+          and region.GetObjectType
+          and region:GetObjectType() == "FontString"
+          and region.GetText then
+          local score = parseDisplayedScore(region:GetText())
+          if score and (not bestScore or score > bestScore) then
+            bestScore = score
+            bestAnchor = region
+          end
+        end
+      end
+    end
+  end
+
+  return bestScore, bestAnchor
+end
+
+local function getOverallDungeonScore()
+  local displayedScore, displayedAnchor = readDisplayedOverallScore()
+  if displayedScore then
+    return displayedScore, displayedAnchor
+  end
+
+  if C_ChallengeMode and C_ChallengeMode.GetOverallDungeonScore then
+    local score = tonumber(C_ChallengeMode.GetOverallDungeonScore())
+    if score and score > 0 then
+      return score, nil
+    end
+  end
+  return nil, nil
+end
+
+function M:EnsureScorePercentileOverlay()
+  if self._scorePercentileOverlay then
+    return self._scorePercentileOverlay
+  end
+  if not ChallengesFrame then return nil end
+
+  local overlay = CreateFrame("Frame", nil, UIParent or ChallengesFrame)
+  overlay:SetSize(58, 24)
+  overlay:SetFrameStrata("DIALOG")
+  overlay:SetFrameLevel(200)
+  overlay:EnableMouse(true)
+
+  overlay.regional = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  overlay.regional:SetPoint("TOPLEFT", 0, 0)
+  overlay.regional:SetJustifyH("LEFT")
+  applyConfiguredFont(overlay.regional, DEFAULT_OVERLAY_FONT, 9, "OUTLINE")
+
+  overlay.world = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  overlay.world:SetPoint("TOPLEFT", overlay.regional, "BOTTOMLEFT", 0, -1)
+  overlay.world:SetJustifyH("LEFT")
+  applyConfiguredFont(overlay.world, DEFAULT_OVERLAY_FONT, 9, "OUTLINE")
+
+  overlay:SetScript("OnEnter", function(selfFrame)
+    if not GameTooltip then return end
+    local data = NS.MMPercentiles or BUILTIN_MM_PERCENTILES or {}
+    GameTooltip:SetOwner(selfFrame, "ANCHOR_RIGHT")
+    GameTooltip:ClearLines()
+    GameTooltip:AddLine((L and L.MM_KEYS_TOOLTIP_PERCENTILE_SOURCE) or "Top percentiles estimated from Raider.IO data", 1, 1, 1)
+    if data.seasonName then
+      GameTooltip:AddLine(tostring(data.seasonName), 0.85, 0.85, 0.85)
+    end
+    if data.updated then
+      GameTooltip:AddLine(tostring(data.updated), 0.65, 0.65, 0.65)
+    end
+    if selfFrame.KaldoScore then
+      GameTooltip:AddLine("Score: " .. tostring(selfFrame.KaldoScore), 0.65, 0.85, 1)
+    end
+    if selfFrame.KaldoDataStatus then
+      GameTooltip:AddLine(selfFrame.KaldoDataStatus, 0.65, 0.65, 0.65)
+    end
+    GameTooltip:Show()
+  end)
+  overlay:SetScript("OnLeave", function()
+    if GameTooltip then GameTooltip:Hide() end
+  end)
+
+  self._scorePercentileOverlay = overlay
+  return overlay
+end
+
+refreshScorePercentileOverlay = function(self)
+  local db = self.db or self:EnsureDB()
+  local scoreFrame = getDungeonScoreText()
+  local scoreVisible = scoreFrame and scoreFrame.IsVisible and scoreFrame:IsVisible()
+  if not (db.enabled and db.score_percentiles and ChallengesFrame and ChallengesFrame.IsVisible and ChallengesFrame:IsVisible() and scoreVisible) then
+    if self._scorePercentileOverlay then self._scorePercentileOverlay:Hide() end
+    return
+  end
+
+  local score, anchor = getOverallDungeonScore()
+  anchor = anchor or scoreFrame
+
+  local regional, world = estimateScorePercentiles(score)
+  local regionalText = formatPercentile(regional) or "--"
+  local worldText = formatPercentile(world) or "--"
+
+  local overlay = self:EnsureScorePercentileOverlay()
+  if not overlay then return end
+  overlay.KaldoScore = score
+  overlay.KaldoDataStatus = (NS.MMPercentiles and NS.MMPercentiles.regions and NS.MMPercentiles.regions.world)
+    and "Percentile data loaded"
+    or "Using built-in percentile fallback"
+  overlay:ClearAllPoints()
+  if anchor then
+    local textHalfWidth = anchor.GetStringWidth and (anchor:GetStringWidth() / 2) or 28
+    overlay:SetPoint("LEFT", anchor, "CENTER", textHalfWidth + 3, 0)
+  else
+    overlay:SetPoint("TOP", ChallengesFrame, "TOP", 68, -175)
+  end
+
+  applyConfiguredFont(overlay.regional, db.score_font, 9, "OUTLINE")
+  applyConfiguredFont(overlay.world, db.score_font, 9, "OUTLINE")
+  overlay.regional:SetText(((L and L.MM_KEYS_PERCENTILE_REGIONAL) or "REG") .. " " .. regionalText)
+  overlay.world:SetText(((L and L.MM_KEYS_PERCENTILE_WORLD) or "WORLD") .. " " .. worldText)
+  overlay.regional:SetTextColor(0.82, 0.92, 1.00, 1)
+  overlay.world:SetTextColor(0.78, 0.78, 0.78, 1)
+  overlay:Show()
+end
+
+function M:DebugScorePercentiles()
+  local db = self.db or self:EnsureDB()
+  local scoreText = getDungeonScoreText()
+  local rawText = scoreText and scoreText.GetText and scoreText:GetText() or nil
+  local parsedScore, anchor = getOverallDungeonScore()
+  local regionKey = getPlayerRegionKey()
+  local data = NS.MMPercentiles or BUILTIN_MM_PERCENTILES
+  local externalData = NS.MMPercentiles
+  local regions = type(data) == "table" and data.regions or nil
+  local regionData = type(regions) == "table" and regions[regionKey] or nil
+  local worldData = type(regions) == "table" and regions.world or nil
+  local regional, world = estimateScorePercentiles(parsedScore)
+
+  refreshScorePercentileOverlay(self)
+
+  chatLine("MM percentile debug")
+  chatLine("enabled=" .. tostring(db.enabled) .. " option=" .. tostring(db.score_percentiles) .. " challengesShown=" .. tostring(ChallengesFrame and ChallengesFrame:IsShown()))
+  chatLine("scoreFrame=" .. tostring(scoreText ~= nil) .. " anchor=" .. tostring(anchor ~= nil))
+  chatLine("rawScore=" .. tostring(rawText) .. " parsedScore=" .. tostring(parsedScore))
+  chatLine("externalDataLoaded=" .. tostring(type(externalData) == "table") .. " fallbackDataLoaded=" .. tostring(data == BUILTIN_MM_PERCENTILES) .. " season=" .. tostring(data and data.season) .. " updated=" .. tostring(data and data.updated))
+  chatLine("region=" .. tostring(regionKey) .. " regionPoints=" .. tostring(regionData and regionData.points and #regionData.points) .. " worldPoints=" .. tostring(worldData and worldData.points and #worldData.points))
+  chatLine("regional=" .. tostring(regional) .. " world=" .. tostring(world))
 end
 
 local function trim(s)
@@ -950,7 +1447,12 @@ tryHookChallengesFrame = function(self)
   ChallengesFrame:HookScript("OnShow", function()
     C_Timer.After(0, function()
       self:RefreshSeasonBestOverlays()
+      refreshScorePercentileOverlay(self)
     end)
+  end)
+  ChallengesFrame:HookScript("OnHide", function()
+    self:HideSeasonBestOverlays()
+    if self._scorePercentileOverlay then self._scorePercentileOverlay:Hide() end
   end)
 
   local updater = CreateFrame("Frame", nil, ChallengesFrame)
@@ -963,6 +1465,7 @@ tryHookChallengesFrame = function(self)
 
     if ChallengesFrame:IsShown() then
       self:RefreshSeasonBestOverlays()
+      refreshScorePercentileOverlay(self)
     end
   end)
   self._seasonBestUpdater = updater
@@ -1024,6 +1527,12 @@ function M:OnEvent(event, ...)
     return
   end
 
+  if event == "PLAYER_REGEN_ENABLED" then
+    self:RefreshSeasonBestOverlays()
+    refreshScorePercentileOverlay(self)
+    return
+  end
+
   if event == "LFG_PROPOSAL_SUCCEEDED" then
     local data = self:ScanAcceptedGroupData()
     if data then
@@ -1077,3 +1586,9 @@ function M:OnEvent(event, ...)
 end
 
 Kaldo:RegisterModule("MMKeys", M)
+
+SLASH_KALDOMMDEBUG1 = "/kaldommdebug"
+SlashCmdList["KALDOMMDEBUG"] = function()
+  ensureChallengesUILoaded()
+  M:DebugScorePercentiles()
+end

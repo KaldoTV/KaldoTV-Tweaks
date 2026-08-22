@@ -1,3 +1,10 @@
+v0.6.0
+
+New Features
+- MM Keys: added optional regional and world Mythic+ score percentile estimates in the Challenges window
+- Release builds now generate fresh Raider.IO percentile data and daily rebuilds publish dated build tags
+- MM Keys: clicking a season-best dungeon tile now casts its dungeon teleport when the teleport is known
+
 v0.5.2
 
 Updates

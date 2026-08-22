@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to write to the TOC, for example v0.5.3"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -18,6 +23,23 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Update TOC version
+        env:
+          VERSION_INPUT: ${{ github.event.inputs.version }}
+        run: |
+          if [ -n "${VERSION_INPUT}" ]; then
+            VERSION="${VERSION_INPUT}"
+          elif [ "${GITHUB_REF#refs/tags/v}" != "${GITHUB_REF}" ]; then
+            VERSION="${GITHUB_REF_NAME:-${GITHUB_REF#refs/tags/}}"
+          else
+            echo "No tag or manual version provided; leaving TOC version unchanged."
+            exit 0
+          fi
+          python3 tools/update_toc_version.py --version "${VERSION}"
+
+      - name: Generate percentile data
+        run: python3 tools/update_mm_percentiles.py
 
       - name: Package and publish
         uses: BigWigsMods/packager@v2
