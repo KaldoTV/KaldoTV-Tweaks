@@ -29,7 +29,7 @@ jobs:
           fi
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
 
-      - name: Tag daily build
+      - name: Create local daily tag
         id: tag_build
         run: |
           TAG="v${{ steps.toc_version.outputs.version }}"
@@ -39,7 +39,6 @@ jobs:
             exit 0
           fi
           git tag "${TAG}"
-          git push origin "${TAG}"
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
           echo "tag_created=true" >> "${GITHUB_OUTPUT}"
 
@@ -51,8 +50,18 @@ jobs:
         if: steps.tag_build.outputs.tag_created == 'true'
         run: python3 tools/update_mm_percentiles.py
 
+      - name: Stage generated package files
+        if: steps.tag_build.outputs.tag_created == 'true'
+        run: |
+          test -s data/mm_percentiles.lua
+          git add -f kaldo_tweaks.toc data/mm_percentiles.lua
+
       - name: Package and publish
         if: steps.tag_build.outputs.tag_created == 'true'
         uses: BigWigsMods/packager@v2
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
+
+      - name: Push daily tag
+        if: steps.tag_build.outputs.tag_created == 'true'
+        run: git push origin "${{ steps.tag_build.outputs.tag }}"

@@ -41,6 +41,11 @@ jobs:
       - name: Generate percentile data
         run: python3 tools/update_mm_percentiles.py
 
+      - name: Stage generated package files
+        run: |
+          test -s data/mm_percentiles.lua
+          git add -f kaldo_tweaks.toc data/mm_percentiles.lua
+
       - name: Package and publish
         uses: BigWigsMods/packager@v2
         env:
