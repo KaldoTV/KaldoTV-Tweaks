@@ -1,3 +1,7 @@
+v0.6.3
+Fix
+- Fix Mythic score attempting to access secret values
+
 v0.6.2
 New feature
 - MM Keys: added an option to hide stale Blizzard guild roster Mythic+ scores for members last seen before the current season

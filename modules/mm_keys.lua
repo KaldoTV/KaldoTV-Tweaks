@@ -250,6 +250,18 @@ local function isTrustedKeysSender(author)
   return type(author) == "string" and author ~= ""
 end
 
+local guildScoreFilterUnsafe = false
+
+local function safeGuildScoreCall(fn, ...)
+  if guildScoreFilterUnsafe then return false end
+  local ok, a, b, c, d = pcall(fn, ...)
+  if not ok then
+    guildScoreFilterUnsafe = true
+    return false
+  end
+  return true, a, b, c, d
+end
+
 local function getCurrentMMSeasonStartTime()
   if not time then return nil end
   return time({
@@ -263,20 +275,30 @@ local function getCurrentMMSeasonStartTime()
 end
 
 local function getApproxOfflineSeconds(memberInfo)
-  if type(memberInfo) ~= "table" or not memberInfo.lastOnlineYear then return nil end
-  local years = tonumber(memberInfo.lastOnlineYear) or 0
-  local months = tonumber(memberInfo.lastOnlineMonth) or 0
-  local days = tonumber(memberInfo.lastOnlineDay) or 0
-  local hours = tonumber(memberInfo.lastOnlineHour) or 0
+  if type(memberInfo) ~= "table" then return nil end
+  local ok, years, months, days, hours = safeGuildScoreCall(function()
+    if not memberInfo.lastOnlineYear then return nil end
+    return tonumber(memberInfo.lastOnlineYear) or 0,
+      tonumber(memberInfo.lastOnlineMonth) or 0,
+      tonumber(memberInfo.lastOnlineDay) or 0,
+      tonumber(memberInfo.lastOnlineHour) or 0
+  end)
+  if not ok or not years then return nil end
   return ((((years * 12) + months) * 30 + days) * 24 + hours) * 3600
 end
 
 local function shouldHideGuildDungeonScore(memberInfo, db)
+  if guildScoreFilterUnsafe then return false end
   if not (db and db.enabled and db.hide_stale_guild_scores) then return false end
   if type(memberInfo) ~= "table" then return false end
-  local score = tonumber(memberInfo.KaldoOriginalOverallDungeonScore or memberInfo.overallDungeonScore)
-  if not score then return false end
-  if not (Enum and Enum.ClubMemberPresence and memberInfo.presence == Enum.ClubMemberPresence.Offline) then return false end
+  local ok, score, presence = safeGuildScoreCall(function()
+    return tonumber(memberInfo.KaldoOriginalOverallDungeonScore or memberInfo.overallDungeonScore), memberInfo.presence
+  end)
+  if not ok or not score then return false end
+  local isOfflineOk, isOffline = safeGuildScoreCall(function()
+    return Enum and Enum.ClubMemberPresence and presence == Enum.ClubMemberPresence.Offline
+  end)
+  if not isOfflineOk or not isOffline then return false end
 
   local seasonStart = getCurrentMMSeasonStartTime()
   local now = GetServerTime and GetServerTime() or (time and time()) or nil
@@ -288,22 +310,34 @@ local function shouldHideGuildDungeonScore(memberInfo, db)
 end
 
 local function applyGuildDungeonScoreFilterToMember(memberInfo, db)
+  if guildScoreFilterUnsafe then return end
   if type(memberInfo) ~= "table" then return end
-  if memberInfo.KaldoOriginalOverallDungeonScore ~= nil then
-    memberInfo.overallDungeonScore = memberInfo.KaldoOriginalOverallDungeonScore
-    memberInfo.KaldoOriginalOverallDungeonScore = nil
-  end
+  local restored = safeGuildScoreCall(function()
+    if memberInfo.KaldoOriginalOverallDungeonScore ~= nil then
+      memberInfo.overallDungeonScore = memberInfo.KaldoOriginalOverallDungeonScore
+      memberInfo.KaldoOriginalOverallDungeonScore = nil
+    end
+  end)
+  if not restored then return end
+
   if shouldHideGuildDungeonScore(memberInfo, db) then
-    memberInfo.KaldoOriginalOverallDungeonScore = memberInfo.overallDungeonScore
-    memberInfo.overallDungeonScore = nil
+    safeGuildScoreCall(function()
+      memberInfo.KaldoOriginalOverallDungeonScore = memberInfo.overallDungeonScore
+      memberInfo.overallDungeonScore = nil
+    end)
   end
 end
 
 local function applyGuildDungeonScoreFilter(memberList, db)
+  if guildScoreFilterUnsafe then return end
   local seen = {}
   local function applyList(list)
     if type(list) ~= "table" then return end
-    for _, memberInfo in ipairs(list) do
+    local ok, count = safeGuildScoreCall(function() return #list end)
+    if not ok then return end
+    for index = 1, count do
+      local memberOk, memberInfo = safeGuildScoreCall(function() return list[index] end)
+      if not memberOk then return end
       if type(memberInfo) == "table" and not seen[memberInfo] then
         seen[memberInfo] = true
         applyGuildDungeonScoreFilterToMember(memberInfo, db)
@@ -315,20 +349,34 @@ local function applyGuildDungeonScoreFilter(memberList, db)
 end
 
 local function getGuildDungeonSortScore(memberInfo, db)
+  if guildScoreFilterUnsafe then return 0 end
   if shouldHideGuildDungeonScore(memberInfo, db) then
     return 0
   end
-  return tonumber(memberInfo and memberInfo.overallDungeonScore) or 0
+  local ok, score = safeGuildScoreCall(function()
+    return tonumber(memberInfo and memberInfo.overallDungeonScore)
+  end)
+  if ok and score then return score end
+  return 0
 end
 
 local function isGuildDungeonScoreSort(memberList, columnIndex)
-  if not (memberList and memberList.GetGuildColumnIndex and memberList:GetGuildColumnIndex() == GUILD_DUNGEON_SCORE_COLUMN_INDEX) then return false end
-  return memberList.columnInfo and columnIndex and columnIndex > #memberList.columnInfo
+  if guildScoreFilterUnsafe then return false end
+  local ok, isScoreColumn = safeGuildScoreCall(function()
+    return memberList and memberList.GetGuildColumnIndex and memberList:GetGuildColumnIndex() == GUILD_DUNGEON_SCORE_COLUMN_INDEX
+  end)
+  if not ok or not isScoreColumn then return false end
+
+  local columnOk, isSortableExtraColumn = safeGuildScoreCall(function()
+    return memberList.columnInfo and columnIndex and columnIndex > #memberList.columnInfo
+  end)
+  return columnOk and isSortableExtraColumn
 end
 
 local function applyGuildDungeonScoreSort(memberList, db)
+  if guildScoreFilterUnsafe then return end
   if type(memberList and memberList.sortedMemberList) ~= "table" then return end
-  table.sort(memberList.sortedMemberList, function(lhs, rhs)
+  safeGuildScoreCall(table.sort, memberList.sortedMemberList, function(lhs, rhs)
     if memberList.reverseActiveColumnSort then
       lhs, rhs = rhs, lhs
     end
@@ -337,14 +385,20 @@ local function applyGuildDungeonScoreSort(memberList, db)
 end
 
 function M:RefreshGuildRosterScores()
+  if guildScoreFilterUnsafe then return end
   if not (CommunitiesFrame and CommunitiesFrame.MemberList and CommunitiesFrame.MemberList.RefreshListDisplay) then return end
   local memberList = CommunitiesFrame.MemberList
-  if memberList.GetGuildColumnIndex and memberList:GetGuildColumnIndex() == GUILD_DUNGEON_SCORE_COLUMN_INDEX then
+  local ok, isScoreColumn = safeGuildScoreCall(function()
+    return memberList.GetGuildColumnIndex and memberList:GetGuildColumnIndex() == GUILD_DUNGEON_SCORE_COLUMN_INDEX
+  end)
+  if ok and isScoreColumn then
     applyGuildDungeonScoreFilter(memberList, self.db or self:EnsureDB())
-    if memberList.activeColumnSortIndex and isGuildDungeonScoreSort(memberList, memberList.activeColumnSortIndex) then
+    local activeColumnSortIndex
+    safeGuildScoreCall(function() activeColumnSortIndex = memberList.activeColumnSortIndex end)
+    if activeColumnSortIndex and isGuildDungeonScoreSort(memberList, activeColumnSortIndex) then
       applyGuildDungeonScoreSort(memberList, self.db or self:EnsureDB())
     end
-    memberList:RefreshListDisplay()
+    safeGuildScoreCall(memberList.RefreshListDisplay, memberList)
   end
 end
 
@@ -352,6 +406,7 @@ tryHookCommunitiesFrame = function(self)
   if not (CommunitiesMemberListMixin and CommunitiesMemberListEntryMixin and hooksecurefunc) then return end
 
   local function afterSortByColumnIndex(memberList, columnIndex)
+    if guildScoreFilterUnsafe then return end
     if not isGuildDungeonScoreSort(memberList, columnIndex) then return end
     local db = self.db or self:EnsureDB()
     applyGuildDungeonScoreFilter(memberList, db)
@@ -359,12 +414,15 @@ tryHookCommunitiesFrame = function(self)
   end
 
   local function afterUpdateMemberList(memberList)
+    if guildScoreFilterUnsafe then return end
     local db = self.db or self:EnsureDB()
     applyGuildDungeonScoreFilter(memberList, db)
-    if not isGuildDungeonScoreSort(memberList, memberList and memberList.activeColumnSortIndex) then return end
+    local activeColumnSortIndex
+    safeGuildScoreCall(function() activeColumnSortIndex = memberList and memberList.activeColumnSortIndex end)
+    if not isGuildDungeonScoreSort(memberList, activeColumnSortIndex) then return end
     applyGuildDungeonScoreSort(memberList, db)
     if memberList and memberList.RefreshListDisplay then
-      memberList:RefreshListDisplay()
+      safeGuildScoreCall(memberList.RefreshListDisplay, memberList)
     end
   end
 
@@ -374,10 +432,12 @@ tryHookCommunitiesFrame = function(self)
     hooksecurefunc(CommunitiesMemberListMixin, "UpdateMemberList", afterUpdateMemberList)
 
     hooksecurefunc(CommunitiesMemberListEntryMixin, "RefreshExpandedColumns", function(entry)
+      if guildScoreFilterUnsafe then return end
       if not (entry and entry.guildColumnIndex == GUILD_DUNGEON_SCORE_COLUMN_INDEX and entry.GuildInfo and entry.GetMemberInfo) then return end
       local db = self.db or self:EnsureDB()
-      if shouldHideGuildDungeonScore(entry:GetMemberInfo(), db) then
-        entry.GuildInfo:SetText(NO_ROSTER_ACHIEVEMENT_POINTS or "-")
+      local ok, memberInfo = safeGuildScoreCall(entry.GetMemberInfo, entry)
+      if ok and shouldHideGuildDungeonScore(memberInfo, db) then
+        safeGuildScoreCall(entry.GuildInfo.SetText, entry.GuildInfo, NO_ROSTER_ACHIEVEMENT_POINTS or "-")
       end
     end)
   end
