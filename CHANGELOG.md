@@ -1,3 +1,11 @@
+v0.6.2
+New feature
+- MM Keys: added an option to hide stale Blizzard guild roster Mythic+ scores for members last seen before the current season
+- Teleport buttons : Now display if the ability is on cooldown
+
+v0.6.1
+- Build fix
+
 v0.6.0
 
 New Features

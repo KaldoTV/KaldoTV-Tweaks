@@ -6,6 +6,7 @@ local DB = NS.DB
 
 local M = {}
 local tryHookChallengesFrame
+local tryHookCommunitiesFrame
 local ensureChallengesUILoaded
 local isLikelySeasonBestButton
 local isLikelySeasonBestFallbackButton
@@ -92,11 +93,14 @@ local KEY_LEVEL_COLOR_RULES = {
 }
 
 local DEFAULT_OVERLAY_FONT = "Fonts\\FRIZQT__.TTF"
+local GUILD_DUNGEON_SCORE_COLUMN_INDEX = 5
+local CURRENT_MM_SEASON_START = { year = 2026, month = 8, day = 19, hour = 0, min = 0, sec = 0 }
 
 local defaults = {
   enabled = false,
   auto_insert = true,
   respond_keys = true,
+  hide_stale_guild_scores = true,
   accept_reminder_chat = true,
   accept_reminder_screen = false,
   season_best_overlay = true,
@@ -246,11 +250,152 @@ local function isTrustedKeysSender(author)
   return type(author) == "string" and author ~= ""
 end
 
+local function getCurrentMMSeasonStartTime()
+  if not time then return nil end
+  return time({
+    year = CURRENT_MM_SEASON_START.year,
+    month = CURRENT_MM_SEASON_START.month,
+    day = CURRENT_MM_SEASON_START.day,
+    hour = CURRENT_MM_SEASON_START.hour,
+    min = CURRENT_MM_SEASON_START.min,
+    sec = CURRENT_MM_SEASON_START.sec,
+  })
+end
+
+local function getApproxOfflineSeconds(memberInfo)
+  if type(memberInfo) ~= "table" or not memberInfo.lastOnlineYear then return nil end
+  local years = tonumber(memberInfo.lastOnlineYear) or 0
+  local months = tonumber(memberInfo.lastOnlineMonth) or 0
+  local days = tonumber(memberInfo.lastOnlineDay) or 0
+  local hours = tonumber(memberInfo.lastOnlineHour) or 0
+  return ((((years * 12) + months) * 30 + days) * 24 + hours) * 3600
+end
+
+local function shouldHideGuildDungeonScore(memberInfo, db)
+  if not (db and db.enabled and db.hide_stale_guild_scores) then return false end
+  if type(memberInfo) ~= "table" then return false end
+  local score = tonumber(memberInfo.KaldoOriginalOverallDungeonScore or memberInfo.overallDungeonScore)
+  if not score then return false end
+  if not (Enum and Enum.ClubMemberPresence and memberInfo.presence == Enum.ClubMemberPresence.Offline) then return false end
+
+  local seasonStart = getCurrentMMSeasonStartTime()
+  local now = GetServerTime and GetServerTime() or (time and time()) or nil
+  if not seasonStart or not now or now <= seasonStart then return false end
+
+  local offlineSeconds = getApproxOfflineSeconds(memberInfo)
+  if not offlineSeconds then return false end
+  return (now - offlineSeconds) < seasonStart
+end
+
+local function applyGuildDungeonScoreFilterToMember(memberInfo, db)
+  if type(memberInfo) ~= "table" then return end
+  if memberInfo.KaldoOriginalOverallDungeonScore ~= nil then
+    memberInfo.overallDungeonScore = memberInfo.KaldoOriginalOverallDungeonScore
+    memberInfo.KaldoOriginalOverallDungeonScore = nil
+  end
+  if shouldHideGuildDungeonScore(memberInfo, db) then
+    memberInfo.KaldoOriginalOverallDungeonScore = memberInfo.overallDungeonScore
+    memberInfo.overallDungeonScore = nil
+  end
+end
+
+local function applyGuildDungeonScoreFilter(memberList, db)
+  local seen = {}
+  local function applyList(list)
+    if type(list) ~= "table" then return end
+    for _, memberInfo in ipairs(list) do
+      if type(memberInfo) == "table" and not seen[memberInfo] then
+        seen[memberInfo] = true
+        applyGuildDungeonScoreFilterToMember(memberInfo, db)
+      end
+    end
+  end
+  applyList(memberList and memberList.allMemberList)
+  applyList(memberList and memberList.sortedMemberList)
+end
+
+local function getGuildDungeonSortScore(memberInfo, db)
+  if shouldHideGuildDungeonScore(memberInfo, db) then
+    return 0
+  end
+  return tonumber(memberInfo and memberInfo.overallDungeonScore) or 0
+end
+
+local function isGuildDungeonScoreSort(memberList, columnIndex)
+  if not (memberList and memberList.GetGuildColumnIndex and memberList:GetGuildColumnIndex() == GUILD_DUNGEON_SCORE_COLUMN_INDEX) then return false end
+  return memberList.columnInfo and columnIndex and columnIndex > #memberList.columnInfo
+end
+
+local function applyGuildDungeonScoreSort(memberList, db)
+  if type(memberList and memberList.sortedMemberList) ~= "table" then return end
+  table.sort(memberList.sortedMemberList, function(lhs, rhs)
+    if memberList.reverseActiveColumnSort then
+      lhs, rhs = rhs, lhs
+    end
+    return getGuildDungeonSortScore(lhs, db) < getGuildDungeonSortScore(rhs, db)
+  end)
+end
+
+function M:RefreshGuildRosterScores()
+  if not (CommunitiesFrame and CommunitiesFrame.MemberList and CommunitiesFrame.MemberList.RefreshListDisplay) then return end
+  local memberList = CommunitiesFrame.MemberList
+  if memberList.GetGuildColumnIndex and memberList:GetGuildColumnIndex() == GUILD_DUNGEON_SCORE_COLUMN_INDEX then
+    applyGuildDungeonScoreFilter(memberList, self.db or self:EnsureDB())
+    if memberList.activeColumnSortIndex and isGuildDungeonScoreSort(memberList, memberList.activeColumnSortIndex) then
+      applyGuildDungeonScoreSort(memberList, self.db or self:EnsureDB())
+    end
+    memberList:RefreshListDisplay()
+  end
+end
+
+tryHookCommunitiesFrame = function(self)
+  if not (CommunitiesMemberListMixin and CommunitiesMemberListEntryMixin and hooksecurefunc) then return end
+
+  local function afterSortByColumnIndex(memberList, columnIndex)
+    if not isGuildDungeonScoreSort(memberList, columnIndex) then return end
+    local db = self.db or self:EnsureDB()
+    applyGuildDungeonScoreFilter(memberList, db)
+    applyGuildDungeonScoreSort(memberList, db)
+  end
+
+  local function afterUpdateMemberList(memberList)
+    local db = self.db or self:EnsureDB()
+    applyGuildDungeonScoreFilter(memberList, db)
+    if not isGuildDungeonScoreSort(memberList, memberList and memberList.activeColumnSortIndex) then return end
+    applyGuildDungeonScoreSort(memberList, db)
+    if memberList and memberList.RefreshListDisplay then
+      memberList:RefreshListDisplay()
+    end
+  end
+
+  if not self._communitiesMixinHooked then
+    self._communitiesMixinHooked = true
+    hooksecurefunc(CommunitiesMemberListMixin, "SortByColumnIndex", afterSortByColumnIndex)
+    hooksecurefunc(CommunitiesMemberListMixin, "UpdateMemberList", afterUpdateMemberList)
+
+    hooksecurefunc(CommunitiesMemberListEntryMixin, "RefreshExpandedColumns", function(entry)
+      if not (entry and entry.guildColumnIndex == GUILD_DUNGEON_SCORE_COLUMN_INDEX and entry.GuildInfo and entry.GetMemberInfo) then return end
+      local db = self.db or self:EnsureDB()
+      if shouldHideGuildDungeonScore(entry:GetMemberInfo(), db) then
+        entry.GuildInfo:SetText(NO_ROSTER_ACHIEVEMENT_POINTS or "-")
+      end
+    end)
+  end
+
+  local memberList = CommunitiesFrame and CommunitiesFrame.MemberList
+  if memberList and not memberList.KaldoStaleGuildScoreHooks then
+    memberList.KaldoStaleGuildScoreHooks = true
+    hooksecurefunc(memberList, "SortByColumnIndex", afterSortByColumnIndex)
+    hooksecurefunc(memberList, "UpdateMemberList", afterUpdateMemberList)
+  end
+end
+
 function M:GetOptions()
   return {
     { type="header", text=self.displayName },
     { type="toggle", key="auto_insert", label=(L and L.MM_KEYS_AUTO_INSERT) or "Auto insert keystone on frame open" },
     { type="toggle", key="respond_keys", label=(L and L.MM_KEYS_RESPOND) or "Respond to !key/!keys" },
+    { type="toggle", key="hide_stale_guild_scores", label=(L and L.MM_KEYS_HIDE_STALE_GUILD_SCORES) or "Hide stale guild M+ scores" },
     { type="header", text=(L and L.MM_KEYS_SEASON_OVERLAY_HEADER) or "Season best overlay" },
     { type="toggle", key="season_best_overlay", label=(L and L.MM_KEYS_SEASON_OVERLAY_ENABLED) or "Show overlay on dungeon tiles" },
     { type="toggle", key="score_percentiles", label=(L and L.MM_KEYS_SCORE_PERCENTILES) or "Show score percentiles" },
@@ -285,13 +430,16 @@ function M:OnRegister()
   self._seasonBestOverlays = {}
   self._scorePercentileOverlay = nil
   self._seasonBestTickerElapsed = 0
+  self._communitiesHooked = false
 end
 
 function M:OnOptionChanged()
   self.db = self:EnsureDB()
   tryHookChallengesFrame(self)
+  tryHookCommunitiesFrame(self)
   self:RefreshSeasonBestOverlays()
   refreshScorePercentileOverlay(self)
+  self:RefreshGuildRosterScores()
 end
 
 local function setFontSize(fs, size, flags)
@@ -493,6 +641,37 @@ local function formatDurationSeconds(totalSeconds)
     return string.format("%d:%02d:%02d", hours, minutes, seconds)
   end
   return string.format("%d:%02d", minutes, seconds)
+end
+
+local function getSpellCooldownRemaining(spellID)
+  if not spellID then return nil end
+  local startTime, duration, enabled, modRate
+  if C_Spell and C_Spell.GetSpellCooldown then
+    local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
+    if ok and type(info) == "table" then
+      startTime = tonumber(info.startTime)
+      duration = tonumber(info.duration)
+      enabled = info.isEnabled
+      modRate = tonumber(info.modRate) or 1
+    end
+  elseif GetSpellCooldown then
+    local ok, start, cooldownDuration, cooldownEnabled, cooldownModRate = pcall(GetSpellCooldown, spellID)
+    if ok then
+      startTime = tonumber(start)
+      duration = tonumber(cooldownDuration)
+      enabled = cooldownEnabled
+      modRate = tonumber(cooldownModRate) or 1
+    end
+  end
+
+  if enabled == false or enabled == 0 then return nil end
+  if not startTime or not duration or startTime <= 0 or duration <= 1.5 then return nil end
+  local now = GetTime and GetTime() or 0
+  local remaining = (startTime + duration - now) / math.max(modRate or 1, 0.001)
+  if remaining > 0 then
+    return remaining
+  end
+  return nil
 end
 
 local function getMapTimeLimit(mapChallengeModeID)
@@ -958,6 +1137,10 @@ function M:RefreshSeasonBestOverlays()
           local teleportName = infoOverlay.KaldoTeleportName or getSpellName(teleportSpellID) or tostring(teleportSpellID)
           if teleportKnown then
             GameTooltip:AddLine(string.format((L and L.MM_KEYS_TOOLTIP_TELEPORT_CLICK_FMT) or "Click: %s", teleportName), 0.45, 0.85, 1)
+            local cooldownRemaining = getSpellCooldownRemaining(teleportSpellID)
+            if cooldownRemaining then
+              GameTooltip:AddLine(((L and L.MM_KEYS_TOOLTIP_TELEPORT_COOLDOWN) or "Cooldown") .. ": " .. formatDurationSeconds(cooldownRemaining), 1, 0.65, 0.25)
+            end
           else
             GameTooltip:AddLine(string.format((L and L.MM_KEYS_TOOLTIP_TELEPORT_UNKNOWN_FMT) or "Teleport not learned: %s", teleportName), 0.55, 0.55, 0.55)
           end
@@ -1506,6 +1689,7 @@ function M:OnEvent(event, ...)
   if event == "PLAYER_LOGIN" then
     self.db = self:EnsureDB()
     tryHookChallengesFrame(self)
+    tryHookCommunitiesFrame(self)
     self._wasInGroup = IsInGroup and IsInGroup() or false
     return
   end
@@ -1514,6 +1698,8 @@ function M:OnEvent(event, ...)
     local addon = ...
     if addon == "Blizzard_ChallengesUI" then
       tryHookChallengesFrame(self)
+    elseif addon == "Blizzard_Communities" then
+      tryHookCommunitiesFrame(self)
     end
     return
   end
