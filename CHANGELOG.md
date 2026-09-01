@@ -1,3 +1,7 @@
+v0.7.1
+Fix
+- Added the new Rite of the Hash'ey enchant (Rank2) as high level enchant
+
 v0.7.0
 Updates
 - Revamped the configuration panel

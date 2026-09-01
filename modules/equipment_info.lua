@@ -86,7 +86,7 @@ local MAX_RANK_ENCHANT_IDS = makeIdSet({
   7971, 7973, 7975, 7977, 7979, 7981, 7983, 7985, 7987, 7989, 7991,
   7993, 7995, 7997, 7999, 8001, 8003, 8005, 8007, 8009, 8011, 8013,
   8015, 8017, 8019, 8021, 8023, 8025, 8027, 8029, 8031, 8033, 8035,
-  8037, 8039, 8041, 8159, 8161, 8163, 8613, 8615,
+  8037, 8039, 8041, 8159, 8161, 8163, 8613, 8615, 8820,
 })
 
 local MAX_RANK_GEM_IDS = makeIdSet({
@@ -94,29 +94,6 @@ local MAX_RANK_GEM_IDS = makeIdSet({
   240914, 240896, 240910, 240900, 240894, 240898, 240967, 240918,
   240902, 240971, 240969, 240983, 241142, 241143, 241144
 })
-
-local function getItemEnchantId(link)
-  if type(link) ~= "string" then return nil end
-  local enchantId = link:match("item:%-?%d+:(%-?%d+)")
-  return enchantId and tonumber(enchantId) or nil
-end
-
-local function isLowRankEnchant(link)
-  local enchantId = getItemEnchantId(link)
-  if enchantId == nil then
-    return nil
-  end
-  if MAX_RANK_ENCHANT_IDS[enchantId] then
-    return false
-  end
-  return true
-end
-
-local function getItemIdFromLink(link)
-  if type(link) ~= "string" then return nil end
-  local itemId = link:match("item:(%-?%d+)")
-  return itemId and tonumber(itemId) or nil
-end
 
 local function findQualityTierInTooltipInfo(info)
   if type(info) ~= "table" or type(info.lines) ~= "table" then
@@ -148,6 +125,37 @@ local function findQualityTierInTooltipInfo(info)
   end
 
   return nil
+end
+
+local function getItemEnchantId(link)
+  if type(link) ~= "string" then return nil end
+  local enchantId = link:match("item:%-?%d+:(%-?%d+)")
+  return enchantId and tonumber(enchantId) or nil
+end
+
+local function isLowRankEnchant(link)
+  if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+    local info = C_TooltipInfo.GetHyperlink(link)
+    local tier = findQualityTierInTooltipInfo(info)
+    if tier then
+      return tier < 3
+    end
+  end
+
+  local enchantId = getItemEnchantId(link)
+  if enchantId == nil then
+    return nil
+  end
+  if MAX_RANK_ENCHANT_IDS[enchantId] then
+    return false
+  end
+  return true
+end
+
+local function getItemIdFromLink(link)
+  if type(link) ~= "string" then return nil end
+  local itemId = link:match("item:(%-?%d+)")
+  return itemId and tonumber(itemId) or nil
 end
 
 local function isLowRankGem(link)
