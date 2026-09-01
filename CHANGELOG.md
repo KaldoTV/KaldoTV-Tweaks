@@ -1,3 +1,10 @@
+v0.7.0
+Updates
+- Revamped the configuration panel
+
+New feature
+- Added a button in the craft panel to send a message and validate the craft order
+
 v0.6.3
 Fix
 - Fix Mythic score attempting to access secret values
