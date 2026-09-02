@@ -16,7 +16,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
+
+      - name: Validate release base
+        run: |
+          BASE_TAG="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -Ev -- '-[0-9]{8}$' | head -n 1 || true)"
+          if [ -n "${BASE_TAG}" ] && ! git merge-base --is-ancestor "${BASE_TAG}" HEAD; then
+            echo "Latest release tag ${BASE_TAG} is not an ancestor of HEAD; refusing to create a daily build from an older commit."
+            exit 1
+          fi
 
       - name: Compute daily version
         id: toc_version
