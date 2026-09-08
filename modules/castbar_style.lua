@@ -31,6 +31,7 @@ local defaults = {
   enabled = false,
   normal_color = { 1.00, 0.70, 0.00, 1.00 },
   important_color = { 1.00, 0.16, 0.12, 1.00 },
+  non_interruptible_color = { 0.45, 0.45, 0.50, 1.00 },
   glow_enabled = true,
   glow_color = { 0.15, 0.85, 1.00, 1.00 },
   glow_lines = 8,
@@ -215,6 +216,7 @@ function M:GetOptions()
     { type = "header", text = (L and L.CASTBAR_STYLE_COLORS) or "Colors" },
     { type = "color", key = "normal_color", label = (L and L.CASTBAR_STYLE_NORMAL_COLOR) or "Normal cast color" },
     { type = "color", key = "important_color", label = (L and L.CASTBAR_STYLE_IMPORTANT_COLOR) or "Important cast color" },
+    { type = "color", key = "non_interruptible_color", label = (L and L.CASTBAR_STYLE_NON_INTERRUPTIBLE_COLOR) or "Non-interruptible cast color" },
     { type = "header", text = (L and L.CASTBAR_STYLE_GLOW) or "Interrupt glow" },
     { type = "toggle", key = "glow_enabled", label = (L and L.CASTBAR_STYLE_GLOW_ENABLED) or "Show glow when your interrupt is ready" },
     { type = "color", key = "glow_color", label = (L and L.CASTBAR_STYLE_GLOW_COLOR) or "Glow color" },
@@ -222,7 +224,7 @@ function M:GetOptions()
     { type = "number", key = "glow_thickness", label = (L and L.CASTBAR_STYLE_GLOW_THICKNESS) or "Glow thickness", min = 1, max = 5, step = 1 },
     { type = "number", key = "glow_speed", label = (L and L.CASTBAR_STYLE_GLOW_SPEED) or "Glow speed", min = 1, max = 8, step = 1 },
     { type = "header", text = (L and L.CASTBAR_STYLE_PREVIEW) or "Preview" },
-    { type = "preview", height = 154, create = function(parent, db) self:CreatePreview(parent, db) end },
+    { type = "preview", height = 206, create = function(parent, db) self:CreatePreview(parent, db) end },
   }
 end
 
@@ -267,6 +269,7 @@ function M:ApplyCastStyle(unit)
 
   local normal = db.normal_color or defaults.normal_color
   local important = db.important_color or defaults.important_color
+  local nonInterruptibleColor = db.non_interruptible_color or defaults.non_interruptible_color
   local r, g, b = colorValue(normal, 1, 1), colorValue(normal, 2, 0.7), colorValue(normal, 3, 0)
   if C_Spell and C_Spell.IsSpellImportant and C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
     local ok, isImportant = pcall(C_Spell.IsSpellImportant, spellID)
@@ -276,6 +279,16 @@ function M:ApplyCastStyle(unit)
       g = evaluate(isImportant, colorValue(important, 2, 0.16), g)
       b = evaluate(isImportant, colorValue(important, 3, 0.12), b)
     end
+  end
+  if C_CurveUtil and C_CurveUtil.EvaluateColorValueFromBoolean then
+    local evaluate = C_CurveUtil.EvaluateColorValueFromBoolean
+    r = evaluate(notInterruptible, colorValue(nonInterruptibleColor, 1, 0.45), r)
+    g = evaluate(notInterruptible, colorValue(nonInterruptibleColor, 2, 0.45), g)
+    b = evaluate(notInterruptible, colorValue(nonInterruptibleColor, 3, 0.50), b)
+  elseif notInterruptible == true then
+    r = colorValue(nonInterruptibleColor, 1, 0.45)
+    g = colorValue(nonInterruptibleColor, 2, 0.45)
+    b = colorValue(nonInterruptibleColor, 3, 0.50)
   end
   -- Modern Blizzard atlases contain their own hue; use a neutral fill for tinting.
   if not state.textureCaptured then
@@ -401,9 +414,10 @@ function M:CreatePreview(parent, db)
 
   local _, normalBar = createPreviewBar(parent, -40, (L and L.CASTBAR_STYLE_PREVIEW_NORMAL) or "Normal cast")
   local _, importantBar = createPreviewBar(parent, -92, (L and L.CASTBAR_STYLE_PREVIEW_IMPORTANT) or "Important cast - interrupt ready")
+  local _, nonInterruptibleBar = createPreviewBar(parent, -144, (L and L.CASTBAR_STYLE_PREVIEW_NON_INTERRUPTIBLE) or "Non-interruptible cast")
   local glow = createPixelGlow(importantBar)
   glow:Show()
-  self.preview = { frame = parent, normal = normalBar, important = importantBar, glow = glow, elapsed = 0 }
+  self.preview = { frame = parent, normal = normalBar, important = importantBar, nonInterruptible = nonInterruptibleBar, glow = glow, elapsed = 0 }
   parent:SetScript("OnUpdate", function(_, elapsed)
     if not self.preview or self.preview.frame ~= parent then return end
     self.preview.elapsed = (self.preview.elapsed + elapsed * 0.18) % 1
@@ -420,8 +434,10 @@ function M:UpdatePreview(db)
   db = db or self.db or self:EnsureDB()
   local normal = db.normal_color or defaults.normal_color
   local important = db.important_color or defaults.important_color
+  local nonInterruptible = db.non_interruptible_color or defaults.non_interruptible_color
   preview.normal:SetStatusBarColor(colorValue(normal, 1, 1), colorValue(normal, 2, 0.7), colorValue(normal, 3, 0))
   preview.important:SetStatusBarColor(colorValue(important, 1, 1), colorValue(important, 2, 0.16), colorValue(important, 3, 0.12))
+  preview.nonInterruptible:SetStatusBarColor(colorValue(nonInterruptible, 1, 0.45), colorValue(nonInterruptible, 2, 0.45), colorValue(nonInterruptible, 3, 0.50))
   preview.glow:Apply(db)
   preview.glow:SetShown(db.glow_enabled == true)
 end
