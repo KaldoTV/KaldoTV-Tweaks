@@ -1,3 +1,12 @@
+v0.8.0
+Fix
+- Kaldo Inspect is now ignoring kick and distant DPS when the group is configured as raid group
+- Hide previous MM rating in guild : to prevent issue if the guild window is opened during a combat, it is now a checkbox
+
+New feature - BETA
+- You can now modify the behavior of the castbar for default nameplates
+
+
 v0.7.1
 Fix
 - Added the new Rite of the Hash'ey enchant (Rank2) as high level enchant

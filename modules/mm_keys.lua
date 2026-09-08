@@ -20,7 +20,11 @@ M.events = {
   "PLAYER_ROLES_ASSIGNED",
   "PARTY_LEADER_CHANGED",
   "PLAYER_SPECIALIZATION_CHANGED",
+  "PLAYER_REGEN_DISABLED",
   "PLAYER_REGEN_ENABLED",
+  "CHALLENGE_MODE_START",
+  "CHALLENGE_MODE_COMPLETED",
+  "CHALLENGE_MODE_RESET",
   "LFG_PROPOSAL_SUCCEEDED",
   "LFG_LIST_APPLICATION_STATUS_UPDATED",
   "LFG_LIST_JOINED_GROUP",
@@ -252,6 +256,14 @@ end
 
 local guildScoreFilterUnsafe = false
 
+local function isGuildScoreFilterBlocked()
+  return shouldSuppressKeysChat() == true
+end
+
+local function isGuildScoreFilterEnabled(db)
+  return db and db.enabled and db.hide_stale_guild_scores and not isGuildScoreFilterBlocked()
+end
+
 local function safeGuildScoreCall(fn, ...)
   if guildScoreFilterUnsafe then return false end
   local ok, a, b, c, d = pcall(fn, ...)
@@ -289,7 +301,7 @@ end
 
 local function shouldHideGuildDungeonScore(memberInfo, db)
   if guildScoreFilterUnsafe then return false end
-  if not (db and db.enabled and db.hide_stale_guild_scores) then return false end
+  if not isGuildScoreFilterEnabled(db) then return false end
   if type(memberInfo) ~= "table" then return false end
   local ok, score, presence = safeGuildScoreCall(function()
     return tonumber(memberInfo.KaldoOriginalOverallDungeonScore or memberInfo.overallDungeonScore), memberInfo.presence
@@ -386,13 +398,14 @@ end
 
 function M:RefreshGuildRosterScores()
   if guildScoreFilterUnsafe then return end
+  if isGuildScoreFilterBlocked() then return end
   if not (CommunitiesFrame and CommunitiesFrame.MemberList and CommunitiesFrame.MemberList.RefreshListDisplay) then return end
   local memberList = CommunitiesFrame.MemberList
+  applyGuildDungeonScoreFilter(memberList, self.db or self:EnsureDB())
   local ok, isScoreColumn = safeGuildScoreCall(function()
     return memberList.GetGuildColumnIndex and memberList:GetGuildColumnIndex() == GUILD_DUNGEON_SCORE_COLUMN_INDEX
   end)
   if ok and isScoreColumn then
-    applyGuildDungeonScoreFilter(memberList, self.db or self:EnsureDB())
     local activeColumnSortIndex
     safeGuildScoreCall(function() activeColumnSortIndex = memberList.activeColumnSortIndex end)
     if activeColumnSortIndex and isGuildDungeonScoreSort(memberList, activeColumnSortIndex) then
@@ -402,11 +415,77 @@ function M:RefreshGuildRosterScores()
   end
 end
 
+function M:UpdateGuildScoreFilterButton()
+  local button = self._guildScoreFilterButton
+  if not button then return end
+  local db = self.db or self:EnsureDB()
+  local blocked = isGuildScoreFilterBlocked()
+  button:SetChecked(db.hide_stale_guild_scores == true)
+  button:SetEnabled(not blocked)
+  if button.Text then
+    local offlineText = CommunitiesFrame and CommunitiesFrame.MemberList and CommunitiesFrame.MemberList.ShowOfflineButton
+    offlineText = offlineText and offlineText.Text
+    if blocked then
+      button.Text:SetTextColor(0.5, 0.5, 0.5)
+    elseif offlineText and offlineText.GetTextColor then
+      button.Text:SetTextColor(offlineText:GetTextColor())
+    else
+      button.Text:SetTextColor(1, 1, 1)
+    end
+  end
+end
+
+function M:CreateGuildScoreFilterButton()
+  local memberList = CommunitiesFrame and CommunitiesFrame.MemberList
+  local offlineButton = memberList and memberList.ShowOfflineButton
+  if not offlineButton or self._guildScoreFilterButton then return end
+
+  local button = CreateFrame("CheckButton", nil, memberList, "UICheckButtonTemplate")
+  local width, height = offlineButton:GetSize()
+  button:SetSize(width > 0 and width or 20, height > 0 and height or 20)
+  if offlineButton.Text then
+    button:SetPoint("LEFT", offlineButton.Text, "RIGHT", 8, 0)
+    local font, fontSize, fontFlags = offlineButton.Text:GetFont()
+    if font then button.Text:SetFont(font, fontSize, fontFlags) end
+  else
+    button:SetPoint("LEFT", offlineButton, "RIGHT", 8, 0)
+  end
+  button.Text:SetText((L and L.MM_KEYS_HIDE_PREVIOUS_SEASONS) or "Hide previous seasons")
+  button:SetScript("OnClick", function(clicked)
+    if isGuildScoreFilterBlocked() then
+      clicked:SetChecked((self.db or self:EnsureDB()).hide_stale_guild_scores == true)
+      return
+    end
+    local db = self.db or self:EnsureDB()
+    db.hide_stale_guild_scores = clicked:GetChecked() == true
+    if PlaySound and SOUNDKIT then PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON) end
+    self:RefreshGuildRosterScores()
+  end)
+  button:SetScript("OnEnter", function(clicked)
+    if not isGuildScoreFilterBlocked() or not GameTooltip then return end
+    GameTooltip:SetOwner(clicked, "ANCHOR_RIGHT")
+    GameTooltip:SetText((L and L.MM_KEYS_GUILD_FILTER_BLOCKED) or "Unavailable during combat, Mythic+ and PvP.", 1, 0.82, 0, true)
+    GameTooltip:Show()
+  end)
+  button:SetScript("OnLeave", function()
+    if GameTooltip then GameTooltip:Hide() end
+  end)
+  button:SetScript("OnShow", function() self:UpdateGuildScoreFilterButton() end)
+  offlineButton:HookScript("OnShow", function() button:Show() end)
+  offlineButton:HookScript("OnHide", function() button:Hide() end)
+  button:SetShown(offlineButton:IsShown())
+  self._guildScoreFilterButton = button
+  self:UpdateGuildScoreFilterButton()
+end
+
 tryHookCommunitiesFrame = function(self)
   if not (CommunitiesMemberListMixin and CommunitiesMemberListEntryMixin and hooksecurefunc) then return end
 
+  self:CreateGuildScoreFilterButton()
+
   local function afterSortByColumnIndex(memberList, columnIndex)
     if guildScoreFilterUnsafe then return end
+    if isGuildScoreFilterBlocked() then return end
     if not isGuildDungeonScoreSort(memberList, columnIndex) then return end
     local db = self.db or self:EnsureDB()
     applyGuildDungeonScoreFilter(memberList, db)
@@ -415,6 +494,7 @@ tryHookCommunitiesFrame = function(self)
 
   local function afterUpdateMemberList(memberList)
     if guildScoreFilterUnsafe then return end
+    if isGuildScoreFilterBlocked() then return end
     local db = self.db or self:EnsureDB()
     applyGuildDungeonScoreFilter(memberList, db)
     local activeColumnSortIndex
@@ -433,6 +513,7 @@ tryHookCommunitiesFrame = function(self)
 
     hooksecurefunc(CommunitiesMemberListEntryMixin, "RefreshExpandedColumns", function(entry)
       if guildScoreFilterUnsafe then return end
+      if isGuildScoreFilterBlocked() then return end
       if not (entry and entry.guildColumnIndex == GUILD_DUNGEON_SCORE_COLUMN_INDEX and entry.GuildInfo and entry.GetMemberInfo) then return end
       local db = self.db or self:EnsureDB()
       local ok, memberInfo = safeGuildScoreCall(entry.GetMemberInfo, entry)
@@ -455,7 +536,6 @@ function M:GetOptions()
     { type="header", text=self.displayName },
     { type="toggle", key="auto_insert", label=(L and L.MM_KEYS_AUTO_INSERT) or "Auto insert keystone on frame open" },
     { type="toggle", key="respond_keys", label=(L and L.MM_KEYS_RESPOND) or "Respond to !key/!keys" },
-    { type="toggle", key="hide_stale_guild_scores", label=(L and L.MM_KEYS_HIDE_STALE_GUILD_SCORES) or "Hide stale guild M+ scores" },
     { type="header", text=(L and L.MM_KEYS_SEASON_OVERLAY_HEADER) or "Season best overlay" },
     { type="toggle", key="season_best_overlay", label=(L and L.MM_KEYS_SEASON_OVERLAY_ENABLED) or "Show overlay on dungeon tiles" },
     { type="toggle", key="score_percentiles", label=(L and L.MM_KEYS_SCORE_PERCENTILES) or "Show score percentiles" },
@@ -491,12 +571,14 @@ function M:OnRegister()
   self._scorePercentileOverlay = nil
   self._seasonBestTickerElapsed = 0
   self._communitiesHooked = false
+  self._guildScoreFilterButton = nil
 end
 
 function M:OnOptionChanged()
   self.db = self:EnsureDB()
   tryHookChallengesFrame(self)
   tryHookCommunitiesFrame(self)
+  self:UpdateGuildScoreFilterButton()
   self:RefreshSeasonBestOverlays()
   refreshScorePercentileOverlay(self)
   self:RefreshGuildRosterScores()
@@ -1773,9 +1855,26 @@ function M:OnEvent(event, ...)
     return
   end
 
+  if event == "PLAYER_REGEN_DISABLED" then
+    self:UpdateGuildScoreFilterButton()
+    return
+  end
+
+  if event == "CHALLENGE_MODE_START"
+    or event == "CHALLENGE_MODE_COMPLETED"
+    or event == "CHALLENGE_MODE_RESET" then
+    self:UpdateGuildScoreFilterButton()
+    if event ~= "CHALLENGE_MODE_START" then
+      self:RefreshGuildRosterScores()
+    end
+    return
+  end
+
   if event == "PLAYER_REGEN_ENABLED" then
     self:RefreshSeasonBestOverlays()
     refreshScorePercentileOverlay(self)
+    self:UpdateGuildScoreFilterButton()
+    self:RefreshGuildRosterScores()
     return
   end
 

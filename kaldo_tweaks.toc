@@ -19,6 +19,7 @@ modules/craft_order_received.lua
 modules/pet_alert.lua
 modules/buff_check.lua
 modules/group_ready.lua
+modules/castbar_style.lua
 modules/mm_keys.lua
 modules/auto_macros.lua
 modules/auto_potion.lua

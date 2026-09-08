@@ -736,6 +736,9 @@ function M:GetUnitSpecID(unit, guid)
 end
 
 function M:BuildMembers()
+  if IsCompactMode() then
+    return {}
+  end
   local members = {}
   for _, unit in ipairs(GetDetailedUnits()) do
     if UnitExists(unit) then
@@ -822,7 +825,7 @@ function M:UpdateLayout()
   local rowHeight = tonumber(db.row_height) or defaults.row_height
   local compact = IsCompactMode()
   if compact then
-    self.frame:SetSize(430, db.show_warnings and 148 or 112)
+    self.frame:SetSize(430, 112)
     self.frame.headerRole:Hide()
     self.frame.headerName:Hide()
     self.frame.headerIlvl:Hide()
@@ -997,6 +1000,13 @@ end
 function M:UpdateWarnings(members)
   if not self.frame then return end
   local db = self.db or self:EnsureDB()
+  if IsCompactMode() then
+    self.frame.warningTitle:Hide()
+    for _, warning in ipairs(self.frame.warnings or {}) do
+      warning:Hide()
+    end
+    return
+  end
   local warnings = self:BuildWarnings(members)
   local rowHeight = tonumber(db.row_height) or defaults.row_height
   local baseY = IsCompactMode() and -106 or (-144 - (5 * (rowHeight + 2)))
@@ -1047,7 +1057,7 @@ function M:UpdateSummary(members)
   local inspectedText = string.format((L and L.GROUP_READY_INSPECTED_FMT) or "%d/%d inspected", inspected or 0, count or 0)
   local text = avgText .. "  |  " .. inspectedText
 
-  if db.show_scores then
+  if db.show_scores and not IsCompactMode() then
     local avgScore, scored = self:GetGroupAverageScore(members)
     local scoreLabel = (L and L.GROUP_READY_AVG_SCORE) or "Score"
     if avgScore then

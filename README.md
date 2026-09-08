@@ -9,6 +9,19 @@ The addon is built as a modular toolbox:
 - avoid unnecessary UI clutter
 - stay compatible with existing saved settings through versioned migrations
 
+## Local Testing
+
+From the repository, deploy to the default WoW Retail installation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\deploy.ps1
+```
+
+Use `-RetailPath 'D:\Games\World of Warcraft\_retail_'` for another installation,
+or `-WhatIf` to preview the destination files. The script copies runtime files
+and verifies their hashes; it does not delete files or modify saved settings.
+Run `/reload` in WoW afterwards. Restart WoW if the TOC file list changed.
+
 ## Features
 
 ### Equipment Info

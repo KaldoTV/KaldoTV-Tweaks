@@ -386,6 +386,17 @@ local function addButton(parent, label, onClick, x, y)
   return b, y + 40
 end
 
+local function addPreview(parent, opt, db, mod, x, y)
+  local height = math.max(80, tonumber(opt.height) or 150)
+  local row = createPanel(parent, C.panel, C.lineSoft)
+  row:SetPoint("TOPLEFT", x, -y)
+  row:SetSize(ROW_W, height)
+  if type(opt.create) == "function" then
+    opt.create(row, db, mod)
+  end
+  return row, y + height + 8
+end
+
 local function compactTabLabel(label)
   label = tostring(label or "")
   if label == "Overlay du meilleur score" then return "Meilleur score" end
@@ -823,6 +834,10 @@ buildModuleOptionsOnCanvas = function(canvasFrame, modName, mod)
       local w; w, y = addButton(content, opt.label, function()
         if opt.onClick then opt.onClick(mod, db) end
       end, x, y)
+      attachTooltip(w, tooltip)
+      addChild(canvasFrame, w)
+    elseif opt.type == "preview" then
+      local w; w, y = addPreview(content, opt, db, mod, x, y)
       attachTooltip(w, tooltip)
       addChild(canvasFrame, w)
     end
