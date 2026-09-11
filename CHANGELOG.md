@@ -1,4 +1,4 @@
-v0.8.1
+v0.8.2
 
 Fixes and performance
 - Cast bars: check secret dimensions before arithmetic to prevent numeric-conversion errors; use a static border while dimensions are inaccessible and resume animation when readable.
