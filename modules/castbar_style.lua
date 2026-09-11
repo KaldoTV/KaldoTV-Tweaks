@@ -97,7 +97,13 @@ local function isInterruptReady(spellID)
   if not (spellID and C_Spell and C_Spell.GetSpellCooldown) then return false end
   local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
   if not ok or type(info) ~= "table" then return false end
+  -- Modern cooldown flags are public even when the numeric duration is secret.
+  -- Do not convert duration to decide readiness on these clients.
+  if type(info.isActive) == "boolean" and not (issecretvalue and issecretvalue(info.isActive)) then
+    return info.isActive == false and info.isEnabled ~= false
+  end
   local readyOK, ready = pcall(function()
+    if issecretvalue and issecretvalue(info.duration) then return false end
     local duration = tonumber(info.duration)
     local enabled = info.isEnabled
     return duration ~= nil and duration <= 0 and enabled ~= false

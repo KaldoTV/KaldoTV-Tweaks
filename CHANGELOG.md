@@ -1,3 +1,8 @@
+v0.8.3
+
+Fix
+- Cast bars: determine interrupt readiness from the public cooldown state instead of converting a potentially secret duration. Fixes missing interrupt glow in combat, with regression coverage for Survival Hunter's Muzzle, cooldown transitions, and non-interruptible casts.
+
 v0.8.2
 
 Fixes and performance

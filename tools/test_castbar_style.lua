@@ -21,8 +21,9 @@ local function widget()
 end
 CreateFrame = widget
 local casting = true
+local notInterruptible = false
 UnitCastingInfo = function()
-  if casting then return 'Cast', nil, nil, 0, 1000, false, 1, false, 123 end
+  if casting then return 'Cast', nil, nil, 0, 1000, false, 1, notInterruptible, 123 end
 end
 UnitChannelInfo = function() end
 UnitExists = function() return true end
@@ -109,7 +110,43 @@ update(glow, 0.04)
 assert(not glow.staticBorder and glow.lines[8].shown, 'Animation did not resume')
 assert(moves == previousMoves + 8, 'Resumed animation has wrong line count')
 
+-- Survival Hunter: a secret numeric cooldown must not suppress a ready Muzzle.
+GetSpecialization = function() return 3 end
+GetSpecializationInfo = function() return 255 end
+IsPlayerSpell = function(id) return id == 187707 end
+local cooldown = { isActive = false, isEnabled = true, duration = secret }
+C_Spell.GetSpellCooldown = function(id)
+  assert(id == 187707, 'Survival Hunter selected the wrong interrupt')
+  return cooldown
+end
+glow.Show = function(self) self.shown = true end
+glow.Hide = function(self) self.shown = false end
+glow.SetAlphaFromBoolean = function(self, flag, yes, no) self.alpha = flag and yes or no end
+module.db.glow_enabled = true
+module:ApplyCastStyle('nameplate1')
+assert(glow.shown and glow.alpha == 1, 'Ready interrupt suppressed by secret duration')
+cooldown.isActive = true
+module:OnEvent('SPELL_UPDATE_COOLDOWN')
+assert(not glow.shown, 'Interrupt on cooldown still highlighted')
+cooldown.isActive = false
+module:OnEvent('SPELL_UPDATE_COOLDOWN')
+assert(glow.shown and glow.alpha == 1, 'Glow did not return when interrupt became ready')
+cooldown.isEnabled = false
+module:ApplyCastStyle('nameplate1')
+assert(not glow.shown, 'Disabled cooldown highlighted')
+cooldown.isEnabled = true
+notInterruptible = true
+module:ApplyCastStyle('nameplate1')
+assert(glow.alpha == 0, 'Non-interruptible cast highlighted')
+notInterruptible = false
+cooldown = { duration = 0, isEnabled = true }
+module:ApplyCastStyle('nameplate1')
+assert(glow.shown and glow.alpha == 1, 'Legacy public cooldown stopped working')
+cooldown.duration = secret
+module:ApplyCastStyle('nameplate1')
+assert(not glow.shown, 'Unknown legacy cooldown treated as ready')
+
 KaldoDB.modules.CastbarStyle.enabled = false
 module:OnOptionChanged()
 assert(module.states.nameplate1 == nil, 'Disabled module retained its state')
-print('PASS: saved settings, colors, Blizzard refresh, removal, disable, glow throttle, secret dimensions, recovery')
+print('PASS: saved settings, colors, Blizzard refresh, removal, disable, glow throttle, secret dimensions, recovery, Survival Hunter interrupt readiness')
