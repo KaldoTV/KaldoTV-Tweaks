@@ -87,6 +87,8 @@ end
 
 local function dispatchToModule(event, mod, ...)
   if mod.OnEvent and isModuleEnabled(mod) then
+    local unit = mod.unitEvents and mod.unitEvents[event]
+    if unit and (...) ~= unit then return end
     local ok, err = pcall(mod.OnEvent, mod, event, ...)
     if not ok then
       dprint(L.MODULE_ERROR .." %s: %s", tostring(mod.name), tostring(err))
@@ -99,7 +101,7 @@ function Kaldo:RefreshEventSubscriptions()
     self.events:RegisterEvent(eventName)
   end
 
-  for _, eventName in ipairs(LEGACY_RUNTIME_EVENTS) do
+  for eventName in pairs(self._runtimeSubscriptions or {}) do
     self.events:UnregisterEvent(eventName)
   end
 
@@ -108,8 +110,9 @@ function Kaldo:RefreshEventSubscriptions()
   for eventName, modules in pairs(self._eventMap) do
     for _, mod in pairs(modules) do
       if isModuleEnabled(mod) then
-        needed[eventName] = true
-        break
+        local unit = mod.unitEvents and mod.unitEvents[eventName] or true
+        if needed[eventName] and needed[eventName] ~= unit then unit = true end
+        needed[eventName] = unit
       end
     end
   end
@@ -123,26 +126,30 @@ function Kaldo:RefreshEventSubscriptions()
     end
   end
 
-  for eventName in pairs(needed) do
+  self._runtimeSubscriptions = {}
+  for eventName, unit in pairs(needed) do
     if not BOOTSTRAP_EVENTS[eventName] and not isSyntheticEvent(eventName) then
-      self.events:RegisterEvent(eventName)
+      if type(unit) == "string" then
+        self.events:RegisterUnitEvent(eventName, unit)
+      else
+        self.events:RegisterEvent(eventName)
+      end
+      self._runtimeSubscriptions[eventName] = true
     end
   end
 end
 
 function Kaldo:Dispatch(event, ...)
-  local dispatched = {}
   local targeted = self._eventMap[event]
 
   if targeted then
     for moduleName, mod in pairs(targeted) do
-      dispatched[moduleName] = true
       dispatchToModule(event, mod, ...)
     end
   end
 
   for moduleName, mod in pairs(self._legacyModules) do
-    if not dispatched[moduleName] then
+    if not (targeted and targeted[moduleName]) then
       dispatchToModule(event, mod, ...)
     end
   end

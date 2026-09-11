@@ -1,3 +1,26 @@
+v0.8.1
+
+Fixes and performance
+- Cast bars: check secret dimensions before arithmetic to prevent numeric-conversion errors; use a static border while dimensions are inaccessible and resume animation when readable.
+- Cast bars: cap glow updates at 30 per second, read dimensions once per update, and avoid reapplying unchanged glow settings.
+- Buff Check: coalesce event bursts into one update after 200 ms, preserving the final state instead of dropping events during the throttle window.
+- Buff Check: ignore unrelated aura units, update only changed icons, and apply layout settings when options change rather than on every aura refresh.
+- Equipment Info: track item and socketed-gem dependencies per slot; ignore unrelated item-data events and coalesce relevant refreshes over 100 ms.
+- Equipment Info: invalidate only affected slot caches; player-only invalidation no longer invalidates inspection through a shared revision.
+- Equipment Info: avoid requesting already cached item data, keep incomplete item-level results retryable, count only scheduled inspection retries, and skip deferred refreshes after module disable.
+- Equipment Info: remove global replacements of Blizzard guild/PvP inspection functions that silently swallowed errors; retain existing secure inspection hooks.
+- Pet Alert: subscribe to health/flags events for the pet and pet-change events for the player; preserve broader subscriptions when another active module needs them.
+- Core: unregister every tracked runtime event when no longer needed, including events outside the legacy list; filter unit events per module and remove the per-dispatch tracking-table allocation.
+- Auto Potion: filter item-data events to configured consumables and inventory/spec events to the player; coalesce updates over 100 ms and refresh options only while the Auto Potion panel is visible.
+- Auto Potion: recheck combat and enabled state before deferred work, keeping macro changes pending until combat ends.
+- MM+ Keys: replace the per-frame polling loop with coalesced refreshes on window opening, Blizzard window updates, map-data changes, and learned-spell changes; skip queued work when hidden or disabled.
+
+Documentation and validation
+- README: document Group Ready, cast bars, additional MM+ features, commands, and local test commands.
+- Add regression tests for migrations, subscription cleanup, unit filtering, event bursts, combat deferral, item/gem cache invalidation, inspection isolation, and MM+ refresh lifecycle.
+- Extend cast-bar tests for animation throttling, simulated secret dimensions, static-border stability, and animation recovery.
+- Lua tests use simulated APIs; combat behavior and visual changes still require validation in WoW. No measured in-game CPU gain is claimed.
+
 v0.8.0
 Fix
 - Kaldo Inspect is now ignoring kick and distant DPS when the group is configured as raid group

@@ -16,6 +16,8 @@ M.events = {
   "PLAYER_SPECIALIZATION_CHANGED",
 }
 
+M.unitEvents = { UNIT_HEALTH = "pet", UNIT_FLAGS = "pet", UNIT_PET = "player" }
+
 local defaults = {
   enabled = false,
 

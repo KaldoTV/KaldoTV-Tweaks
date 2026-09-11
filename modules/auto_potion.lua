@@ -38,6 +38,12 @@ local ACTION_CONFIG = {
   { key = "healthstone", kind = "item", rank1 = 5512, rank2 = 224464}
 }
 
+local CONFIGURED_ITEMS = {}
+for _, action in ipairs(ACTION_CONFIG) do
+  if action.rank1 then CONFIGURED_ITEMS[action.rank1] = true end
+  if action.rank2 then CONFIGURED_ITEMS[action.rank2] = true end
+end
+
 local DEFAULT_PRIORITY_ORDER = {
   "racial_auto",
   "crimson_vial",
@@ -557,10 +563,28 @@ function M:QueueUpdate()
     return
   end
   self._pendingUpdate = false
-  self:UpdateMacro()
+  if self._updateQueued then return end
+  self._updateQueued = true
+  C_Timer.After(0.1, function()
+    self._updateQueued = nil
+    if not self.db or not self.db.enabled then return end
+    if InCombatLockdown and InCombatLockdown() then
+      self._pendingUpdate = true
+      return
+    end
+    self:UpdateMacro()
+    if self._refreshOptions then
+      self._refreshOptions = nil
+      local ui = NS.UI
+      if ui and ui.mainFrame and ui.mainFrame:IsShown() and ui.selectedModule == "AutoPotion" then
+        ui:RefreshModuleOptions("AutoPotion")
+      end
+    end
+  end)
 end
 
-function M:OnEvent(event)
+function M:OnEvent(event, arg1)
+  if (event == "UNIT_INVENTORY_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED") and arg1 ~= "player" then return end
   if event == "PLAYER_LOGIN" then
     self.db = self:EnsureDB()
     self:QueueUpdate()
@@ -583,10 +607,9 @@ function M:OnEvent(event)
   end
 
   if event == "GET_ITEM_INFO_RECEIVED" then
+    if not CONFIGURED_ITEMS[arg1] then return end
+    self._refreshOptions = true
     self:QueueUpdate()
-    if NS.UI and NS.UI.RefreshModuleOptions then
-      NS.UI:RefreshModuleOptions("AutoPotion")
-    end
     return
   end
 end

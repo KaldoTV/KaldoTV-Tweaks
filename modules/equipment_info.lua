@@ -346,6 +346,7 @@ end
 
 local function requestItemData(self, itemId)
   if not (self and itemId and C_Item and C_Item.RequestLoadItemDataByID) then return end
+  if C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(itemId) then return end
   self.pendingInspect = self.pendingInspect or {}
   if not self.pendingInspect[itemId] then
     self.pendingInspect[itemId] = true
@@ -586,14 +587,14 @@ function M:OnRegister(core)
 end
 
 function M:InvalidateRenderCache(scope)
-  self._cacheRevision = (self._cacheRevision or 0) + 1
-
   if not scope or scope == "player" then
     self.playerSlotCache = {}
+    self.playerSlotItems = {}
   end
 
   if not scope or scope == "inspect" then
     self.inspectSlotCache = {}
+    self.inspectSlotItems = {}
   end
 end
 
@@ -703,6 +704,11 @@ function M:GetSocketDisplayText(unit, db, slotId, link)
     for gemid = 1, totalSockets do
       local _, socketedGemLink = GetItemGem(link, gemid)
       if socketedGemLink then
+        local gemItemID = getItemIdFromLink(socketedGemLink)
+        if gemItemID and self.playerSlotItems and self.playerSlotItems[slotId] then
+          self.playerSlotItems[slotId][gemItemID] = true
+          requestItemData(self, gemItemID)
+        end
         local isLowRank = isLowRankGem(socketedGemLink)
         if isLowRank == true then
           hasMaxRankGems = false
@@ -807,17 +813,23 @@ function M:RenderSlot(unit, slot, fsIL, fsEN, db, playerClass)
   end
 
   local link = GetInventoryItemLink(unit, slot.id)
+  local itemsKey = unit == "player" and "playerSlotItems" or "inspectSlotItems"
+  self[itemsKey] = self[itemsKey] or {}
+  if not link then
+    self[itemsKey][slot.id] = nil
+    local inventoryID = GetInventoryItemID and GetInventoryItemID(unit, slot.id)
+    if inventoryID then
+      self[itemsKey][slot.id] = { [inventoryID] = true }
+      requestItemData(self, inventoryID)
+    end
+  end
   local displayText = ""
   local cache = (unit == "player") and self.playerSlotCache or self.inspectSlotCache
   local dataLink, dataLevel, itemId
   if link then
     itemId = tonumber(link:match("item:(%d+):"))
-    if unit ~= "player" and itemId then
-      requestItemData(self, itemId)
-    end
     dataLink, dataLevel = self:GetInspectSlotData(unit, slot.id)
     local signature = table.concat({
-      tostring(self._cacheRevision or 0),
       tostring(unit),
       tostring(slot.id),
       tostring(link),
@@ -834,6 +846,12 @@ function M:RenderSlot(unit, slot, fsIL, fsEN, db, playerClass)
       return
     end
 
+    local dependencies = {}
+    self[itemsKey][slot.id] = dependencies
+    if itemId then
+      dependencies[itemId] = true
+      requestItemData(self, itemId)
+    end
     local _, _, _, _, _, _, _, _, _, _, _, itemType, itemSubtype = GetItemInfo(link)
 
     local linkForTip = dataLink or link
@@ -850,7 +868,7 @@ function M:RenderSlot(unit, slot, fsIL, fsEN, db, playerClass)
     end
 
     displayText = self:BuildSlotDisplay(unit, slot.id, link, db, itemType, itemSubtype, playerClass)
-    if cache then
+    if cache and ilvl then
       cache[slot.id] = {
         signature = signature,
         ilvlText = ilvlText,
@@ -1006,13 +1024,13 @@ function M:UpdateDisplay()
 end
 
 function M:ScheduleInspectRetry()
+  if self._inspectRetryTimer then return end
   self._inspectRetryCount = (self._inspectRetryCount or 0) + 1
   if self._inspectRetryCount > 6 then return end
-  if self._inspectRetryTimer then return end
   self._inspectRetryTimer = true
   C_Timer.After(0.2, function()
     self._inspectRetryTimer = nil
-    if InspectFrame and InspectFrame:IsShown() then
+    if self.db and self.db.enabled and InspectFrame and InspectFrame:IsShown() then
       self:UpdateDisplay()
     end
   end)
@@ -1033,30 +1051,6 @@ function M:OnEvent(event, ...)
         end
       end)
       self.inspectHooked = true
-    end
-    if addon == "Blizzard_InspectUI" and not self.inspectGuildSafe then
-      if type(InspectGuildFrame_Update) == "function" then
-        local orig = InspectGuildFrame_Update
-        InspectGuildFrame_Update = function(...)
-          local ok = pcall(orig, ...)
-          if not ok then return end
-        end
-        self.inspectGuildSafe = true
-      end
-    end
-    if addon == "Blizzard_InspectUI" and not self.inspectPVPSafe then
-      if type(InspectPVPFrame_Update) == "function" then
-        local orig = InspectPVPFrame_Update
-        InspectPVPFrame_Update = function(parent, ...)
-          local unit = parent and parent.unit
-          if not (unit and UnitExists and UnitExists(unit)) then
-            return
-          end
-          local ok = pcall(orig, parent, ...)
-          if not ok then return end
-        end
-        self.inspectPVPSafe = true
-      end
     end
     if addon == "Blizzard_InspectUI" and not self.inspectShowHooked and _G.InspectFrame_Show then
       hooksecurefunc("InspectFrame_Show", function()
@@ -1134,9 +1128,25 @@ function M:OnEvent(event, ...)
     if self.pendingInspect and itemId and self.pendingInspect[itemId] then
       self.pendingInspect[itemId] = nil
     end
-    self:InvalidateRenderCache()
+    local relevant = false
+    for _, scope in ipairs({ "player", "inspect" }) do
+      for slotId, items in pairs(self[scope .. "SlotItems"] or {}) do
+        if items[itemId] then
+          local cache = self[scope .. "SlotCache"]
+          if cache then cache[slotId] = nil end
+          relevant = true
+        end
+      end
+    end
+    if not relevant or self._itemUpdateQueued then return end
+    self._itemUpdateQueued = true
+    C_Timer.After(0.1, function()
+      self._itemUpdateQueued = nil
+      if self.db and self.db.enabled then self:UpdateDisplay() end
+    end)
+    return
   end
-  if event == "KALDOTV_INSPECTFRAME_OPENED" or event == "INSPECT_READY" or event == "GET_ITEM_INFO_RECEIVED" then
+  if event == "KALDOTV_INSPECTFRAME_OPENED" or event == "INSPECT_READY" then
     self:UpdateDisplay()
     return
   end

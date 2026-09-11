@@ -25,6 +25,8 @@ M.events = {
   "CHALLENGE_MODE_START",
   "CHALLENGE_MODE_COMPLETED",
   "CHALLENGE_MODE_RESET",
+  "CHALLENGE_MODE_MAPS_UPDATE",
+  "SPELLS_CHANGED",
   "LFG_PROPOSAL_SUCCEEDED",
   "LFG_LIST_APPLICATION_STATUS_UPDATED",
   "LFG_LIST_JOINED_GROUP",
@@ -569,7 +571,6 @@ function M:OnRegister()
   self._lastKeysResponseAt = 0
   self._seasonBestOverlays = {}
   self._scorePercentileOverlay = nil
-  self._seasonBestTickerElapsed = 0
   self._communitiesHooked = false
   self._guildScoreFilterButton = nil
 end
@@ -1221,6 +1222,7 @@ function M:RefreshSeasonBestOverlays()
     return
   end
 
+  if not ChallengesFrame or not ChallengesFrame:IsShown() then return end
   local buttons = self:ResolveSeasonBestButtons()
   if #buttons == 0 then
     self:HideSeasonBestOverlays()
@@ -1769,33 +1771,30 @@ tryHookChallengesFrame = function(self)
   if not ChallengesFrame then return end
 
   self._seasonBestHooked = true
-  ChallengesFrame:HookScript("OnShow", function()
-    C_Timer.After(0, function()
-      self:RefreshSeasonBestOverlays()
-      refreshScorePercentileOverlay(self)
-    end)
-  end)
+  ChallengesFrame:HookScript("OnShow", function() self:QueueChallengesRefresh() end)
   ChallengesFrame:HookScript("OnHide", function()
     self:HideSeasonBestOverlays()
     if self._scorePercentileOverlay then self._scorePercentileOverlay:Hide() end
   end)
 
-  local updater = CreateFrame("Frame", nil, ChallengesFrame)
-  updater:SetScript("OnUpdate", function(_, elapsed)
-    self._seasonBestTickerElapsed = (self._seasonBestTickerElapsed or 0) + elapsed
-    if self._seasonBestTickerElapsed < 1.0 then
-      return
-    end
-    self._seasonBestTickerElapsed = 0
-
-    if ChallengesFrame:IsShown() then
-      self:RefreshSeasonBestOverlays()
-      refreshScorePercentileOverlay(self)
-    end
-  end)
-  self._seasonBestUpdater = updater
+  if ChallengesFrame.Update and hooksecurefunc then
+    hooksecurefunc(ChallengesFrame, "Update", function() self:QueueChallengesRefresh() end)
+  end
+  self:QueueChallengesRefresh()
 end
 
+
+function M:QueueChallengesRefresh()
+  if not self.db or not self.db.enabled or not ChallengesFrame or not ChallengesFrame:IsShown() then return end
+  if self._challengesRefreshQueued then return end
+  self._challengesRefreshQueued = true
+  C_Timer.After(0, function()
+    self._challengesRefreshQueued = nil
+    if not self.db or not self.db.enabled or not ChallengesFrame or not ChallengesFrame:IsShown() then return end
+    self:RefreshSeasonBestOverlays()
+    refreshScorePercentileOverlay(self)
+  end)
+end
 
 function M:RespondKeys(event)
   local db = self.db or self:EnsureDB()
@@ -1828,6 +1827,10 @@ function M:RespondKeys(event)
 end
 
 function M:OnEvent(event, ...)
+  if event == "CHALLENGE_MODE_MAPS_UPDATE" or event == "SPELLS_CHANGED" then
+    self:QueueChallengesRefresh()
+    return
+  end
   if event == "PLAYER_LOGIN" then
     self.db = self:EnsureDB()
     tryHookChallengesFrame(self)
@@ -1863,6 +1866,7 @@ function M:OnEvent(event, ...)
   if event == "CHALLENGE_MODE_START"
     or event == "CHALLENGE_MODE_COMPLETED"
     or event == "CHALLENGE_MODE_RESET" then
+    self:QueueChallengesRefresh()
     self:UpdateGuildScoreFilterButton()
     if event ~= "CHALLENGE_MODE_START" then
       self:RefreshGuildRosterScores()

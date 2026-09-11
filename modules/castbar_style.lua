@@ -105,10 +105,7 @@ local function isInterruptReady(spellID)
   return readyOK and ready == true
 end
 
-local function positionGlowLine(texture, owner, distance, thickness)
-  local width = math.max(owner:GetWidth() or 0, 20)
-  local height = math.max(owner:GetHeight() or 0, 8)
-  local perimeter = (2 * width) + (2 * height)
+local function positionGlowLine(texture, owner, distance, width, height, perimeter)
   local point = distance % perimeter
   local x, y
   if point < width then
@@ -122,7 +119,17 @@ local function positionGlowLine(texture, owner, distance, thickness)
   end
   texture:ClearAllPoints()
   texture:SetPoint("CENTER", owner, "TOPLEFT", x, y)
-  texture:SetSize(math.max(2, thickness * 2.4), math.max(2, thickness))
+end
+
+local GLOW_UPDATE_INTERVAL = 1 / 30
+local BORDER_ANCHORS = {
+  { "TOPLEFT", "TOPRIGHT" }, { "BOTTOMLEFT", "BOTTOMRIGHT" },
+  { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" },
+}
+
+local function isPublicDimension(value)
+  if issecretvalue and issecretvalue(value) then return false end
+  return type(value) == "number" and value > 0 and value < math.huge
 end
 
 local function createPixelGlow(owner)
@@ -132,6 +139,7 @@ local function createPixelGlow(owner)
   glow:EnableMouse(false)
   glow.lines = {}
   glow.elapsed = 0
+  glow.updateElapsed = 0
 
   for i = 1, 12 do
     local line = glow:CreateTexture(nil, "OVERLAY")
@@ -141,27 +149,62 @@ local function createPixelGlow(owner)
   end
 
   function glow:Apply(db)
-    self.lineCount = math.max(4, math.min(12, tonumber(db.glow_lines) or defaults.glow_lines))
-    self.thickness = math.max(1, math.min(5, tonumber(db.glow_thickness) or defaults.glow_thickness))
-    self.speed = math.max(1, math.min(8, tonumber(db.glow_speed) or defaults.glow_speed))
+    local count = math.max(4, math.min(12, tonumber(db.glow_lines) or defaults.glow_lines))
+    local thickness = math.max(1, math.min(5, tonumber(db.glow_thickness) or defaults.glow_thickness))
+    local speed = math.max(1, math.min(8, tonumber(db.glow_speed) or defaults.glow_speed))
     local r = colorValue(db.glow_color, 1, 0.15)
     local g = colorValue(db.glow_color, 2, 0.85)
     local b = colorValue(db.glow_color, 3, 1.00)
     local a = colorValue(db.glow_color, 4, 1.00)
+    if self.lineCount == count and self.thickness == thickness and self.speed == speed
+      and self.r == r and self.g == g and self.b == b and self.a == a then return end
+    self.lineCount, self.thickness, self.speed = count, thickness, speed
+    self.r, self.g, self.b, self.a = r, g, b, a
     for i, line in ipairs(self.lines) do
       line:SetVertexColor(r, g, b, a)
       line:SetShown(i <= self.lineCount)
+      line:SetSize(math.max(2, self.thickness * 2.4), math.max(2, self.thickness))
     end
+    self.staticBorder = nil
   end
 
   glow:SetScript("OnUpdate", function(self, elapsed)
-    self.elapsed = (self.elapsed + elapsed * self.speed * 28) % 100000
-    local width = math.max(owner:GetWidth() or 0, 20)
-    local height = math.max(owner:GetHeight() or 0, 8)
+    self.updateElapsed = self.updateElapsed + elapsed
+    if self.updateElapsed < GLOW_UPDATE_INTERVAL then return end
+    self.elapsed = (self.elapsed + self.updateElapsed * self.speed * 28) % 100000
+    self.updateElapsed = 0
+    -- Anchoring to Blizzard frames can make their dimensions secret in combat.
+    -- Never compare, convert or do arithmetic on them before checking.
+    local width, height = owner:GetWidth(), owner:GetHeight()
+    if not isPublicDimension(width) or not isPublicDimension(height) then
+      if not self.staticBorder then
+        for i, line in ipairs(self.lines) do
+          line:ClearAllPoints()
+          local anchors = BORDER_ANCHORS[i]
+          if anchors then
+            line:SetPoint(anchors[1], owner, anchors[1], 0, 0)
+            line:SetPoint(anchors[2], owner, anchors[2], 0, 0)
+            if i <= 2 then line:SetHeight(self.thickness) else line:SetWidth(self.thickness) end
+          end
+          line:SetShown(anchors ~= nil)
+        end
+        self.staticBorder = true
+      end
+      return
+    end
+    if self.staticBorder then
+      for i, line in ipairs(self.lines) do
+        line:ClearAllPoints()
+        line:SetSize(math.max(2, self.thickness * 2.4), math.max(2, self.thickness))
+        line:SetShown(i <= self.lineCount)
+      end
+      self.staticBorder = nil
+    end
+    width, height = math.max(width, 20), math.max(height, 8)
     local perimeter = (2 * width) + (2 * height)
     local count = self.lineCount or defaults.glow_lines
     for i = 1, count do
-      positionGlowLine(self.lines[i], owner, self.elapsed + ((i - 1) * perimeter / count), self.thickness or 2)
+      positionGlowLine(self.lines[i], owner, self.elapsed + ((i - 1) * perimeter / count), width, height, perimeter)
     end
   end)
 

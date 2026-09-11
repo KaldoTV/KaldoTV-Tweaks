@@ -10,8 +10,12 @@ assert(loadfile('db.lua'))('kaldo_tweaks', NS)
 
 local function widget()
   return setmetatable({}, { __index = function(_, key)
+    if key:match('^[a-z]') then return nil end
     if key == 'GetFrameLevel' then return function() return 1 end end
     if key == 'CreateTexture' then return widget end
+    if key == 'SetScript' then return function(self, event, callback)
+      self.scripts = self.scripts or {}; self.scripts[event] = callback
+    end end
     return function() end
   end })
 end
@@ -70,7 +74,42 @@ for _, callback in ipairs(timers) do callback() end
 assert(module.states.nameplate1 == nil, 'Removed plate was styled by a queued callback')
 
 module:ApplyCastStyle('nameplate1')
+local glow = module.states.nameplate1.glow
+local reads, moves = 0, 0
+local width, height = 120, 12
+bar.GetWidth = function() reads = reads + 1; return width end
+bar.GetHeight = function() reads = reads + 1; return height end
+for _, line in ipairs(glow.lines) do
+  line.SetPoint = function() moves = moves + 1 end
+  line.SetShown = function(self, shown) self.shown = shown end
+end
+local update = glow.scripts.OnUpdate
+update(glow, 0.01)
+assert(reads == 0 and moves == 0, 'Glow updated before its interval')
+update(glow, 0.03)
+assert(reads == 2 and moves == 8, 'Dimensions must be read once per animation update')
+
+-- Ordinary Lua cannot create WoW secrets; this sentinel fails if used as a number.
+local secret = {}
+issecretvalue = function(value) return rawequal(value, secret) end
+width = secret
+update(glow, 0.04)
+assert(glow.staticBorder == true, 'Secret width did not select safe border')
+assert(glow.lines[4].shown and not glow.lines[5].shown, 'Safe border needs four edges')
+local previousMoves = moves
+glow:Apply(module.db)
+assert(glow.staticBorder == true, 'Unchanged settings reset the safe border')
+update(glow, 0.04)
+assert(moves == previousMoves, 'Static border was unnecessarily repositioned')
+width, height = 120, secret
+update(glow, 0.04)
+assert(glow.staticBorder == true, 'Secret height did not select safe border')
+width, height = 160, 16
+update(glow, 0.04)
+assert(not glow.staticBorder and glow.lines[8].shown, 'Animation did not resume')
+assert(moves == previousMoves + 8, 'Resumed animation has wrong line count')
+
 KaldoDB.modules.CastbarStyle.enabled = false
 module:OnOptionChanged()
 assert(module.states.nameplate1 == nil, 'Disabled module retained its state')
-print('PASS: saved settings, normal/important colors, Blizzard refresh, removal, disable')
+print('PASS: saved settings, colors, Blizzard refresh, removal, disable, glow throttle, secret dimensions, recovery')

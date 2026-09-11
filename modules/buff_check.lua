@@ -1229,6 +1229,7 @@ end
 function M:ClearIcons()
   for _, f in ipairs(self.icons) do
     f:Hide()
+    f._renderKey = nil
   end
 end
 
@@ -1261,6 +1262,7 @@ end
 
 function M:ResetDB()
   self.db = DB:ResetModuleState("BuffCheck", defaults)
+  self:ClearIcons()
   self:EnsureDB()
   self:ApplyStyle()
   self:UpdateDisplay()
@@ -1318,8 +1320,10 @@ function M:UpdateDisplay()
     end
   end
 
-  self:ApplyStyle()
-  self:ClearIcons()
+  for i = #missing + 1, #self.icons do
+    self.icons[i]:Hide()
+    self.icons[i]._renderKey = nil
+  end
   if #missing == 0 then
     return
   end
@@ -1331,77 +1335,81 @@ function M:UpdateDisplay()
       self.icons[i] = icon
     end
 
-    local size = self.iconSize
-    icon:SetSize(size, size)
-    local total = (#missing * size) + ((#missing - 1) * self.spacing)
-    local growth = db.growth or "center"
-    local x
-    if growth == "right" then
-      x = (i - 1) * (size + self.spacing)
-    elseif growth == "left" then
-      x = -((i - 1) * (size + self.spacing))
-    else
-      x = (i - 1) * (size + self.spacing) - (total / 2) + (size / 2)
-    end
-    icon:ClearAllPoints()
-    icon:SetPoint("CENTER", self.frame, "CENTER", x, 0)
-    icon.tex:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-
-    local style = db.highlightStyle or "blizzard"
-    local badgeText = GetRuleBadgeText(entry.rule)
-    if badgeText then
-      icon.badge:SetText(badgeText)
-      icon.badge:SetFont("Fonts\\FRIZQT__.TTF", math.max(10, math.floor(size * 0.28)), "OUTLINE")
-      local textWidth = icon.badge:GetStringWidth() or 0
-      local textHeight = icon.badge:GetStringHeight() or 0
-      icon.badgeBG:SetSize(textWidth + 6, textHeight + 2)
-      icon.badgeBG:Show()
-      icon.badge:Show()
-    else
-      icon.badgeBG:Hide()
-      icon.badge:Hide()
-      icon.badge:SetText("")
-    end
-
-    if style == "blizzard" then
-      style = "proc"
-    end
-
-    if entry.highlight and style ~= "none" then
-      HideHighlightEffects(icon)
-      if style == "pixel" then
-        local thick = math.max(1, math.floor(size / 16))
-        icon.pixel.top:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
-        icon.pixel.top:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
-        icon.pixel.top:SetHeight(thick)
-        icon.pixel.bottom:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
-        icon.pixel.bottom:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
-        icon.pixel.bottom:SetHeight(thick)
-        icon.pixel.left:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
-        icon.pixel.left:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
-        icon.pixel.left:SetWidth(thick)
-        icon.pixel.right:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
-        icon.pixel.right:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
-        icon.pixel.right:SetWidth(thick)
-        for _, t in pairs(icon.pixel) do
-          t:Show()
-        end
-      elseif style == "autocast" then
-        ShowAutoCastHighlight(icon, size)
-      elseif style == "border" then
-        icon.border:SetSize(size * 1.55, size * 1.55)
-        icon.border:Show()
-      elseif style == "proc" then
-        ShowProcHighlight(icon, size)
+    local renderKey = entry.key .. ":" .. tostring(entry.highlight) .. ":" .. #missing
+    if icon._renderKey ~= renderKey then
+      icon._renderKey = renderKey
+      local size = self.iconSize
+      icon:SetSize(size, size)
+      local total = (#missing * size) + ((#missing - 1) * self.spacing)
+      local growth = db.growth or "center"
+      local x
+      if growth == "right" then
+        x = (i - 1) * (size + self.spacing)
+      elseif growth == "left" then
+        x = -((i - 1) * (size + self.spacing))
       else
-        icon.border:SetSize(size * 2.2, size * 2.2)
-        icon.border:Show()
+        x = (i - 1) * (size + self.spacing) - (total / 2) + (size / 2)
       end
-    else
-      HideHighlightEffects(icon)
-    end
+      icon:ClearAllPoints()
+      icon:SetPoint("CENTER", self.frame, "CENTER", x, 0)
+      icon.tex:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
 
-    icon:Show()
+      local style = db.highlightStyle or "blizzard"
+      local badgeText = GetRuleBadgeText(entry.rule)
+      if badgeText then
+        icon.badge:SetText(badgeText)
+        icon.badge:SetFont("Fonts\\FRIZQT__.TTF", math.max(10, math.floor(size * 0.28)), "OUTLINE")
+        local textWidth = icon.badge:GetStringWidth() or 0
+        local textHeight = icon.badge:GetStringHeight() or 0
+        icon.badgeBG:SetSize(textWidth + 6, textHeight + 2)
+        icon.badgeBG:Show()
+        icon.badge:Show()
+      else
+        icon.badgeBG:Hide()
+        icon.badge:Hide()
+        icon.badge:SetText("")
+      end
+
+      if style == "blizzard" then
+        style = "proc"
+      end
+
+      if entry.highlight and style ~= "none" then
+        HideHighlightEffects(icon)
+        if style == "pixel" then
+          local thick = math.max(1, math.floor(size / 16))
+          icon.pixel.top:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
+          icon.pixel.top:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
+          icon.pixel.top:SetHeight(thick)
+          icon.pixel.bottom:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+          icon.pixel.bottom:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+          icon.pixel.bottom:SetHeight(thick)
+          icon.pixel.left:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
+          icon.pixel.left:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+          icon.pixel.left:SetWidth(thick)
+          icon.pixel.right:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
+          icon.pixel.right:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+          icon.pixel.right:SetWidth(thick)
+          for _, t in pairs(icon.pixel) do
+            t:Show()
+          end
+        elseif style == "autocast" then
+          ShowAutoCastHighlight(icon, size)
+        elseif style == "border" then
+          icon.border:SetSize(size * 1.55, size * 1.55)
+          icon.border:Show()
+        elseif style == "proc" then
+          ShowProcHighlight(icon, size)
+        else
+          icon.border:SetSize(size * 2.2, size * 2.2)
+          icon.border:Show()
+        end
+      else
+        HideHighlightEffects(icon)
+      end
+
+      icon:Show()
+    end
   end
 end
 
@@ -1467,6 +1475,7 @@ end
 
 function M:OnOptionChanged()
   self.db = self:EnsureDB()
+  self:ClearIcons()
   self:ApplyStyle()
   self:UpdateDisplay()
 end
@@ -1477,7 +1486,6 @@ function M:OnRegister()
   self.frame:SetSize(1, 1)
   self.frame:SetFrameStrata("MEDIUM")
   self.icons = {}
-  self._last = 0
   self:ApplyStyle()
 end
 
@@ -1493,10 +1501,8 @@ function M:OnEvent(event, unit)
     return
   end
 
-  if event == "UNIT_AURA" and unit and unit ~= "player" then
-    if not (IsInGroup and IsInGroup()) and not (IsInRaid and IsInRaid()) then
-      return
-    end
+  if event == "UNIT_AURA" and unit ~= "player" and unit ~= "pet" then
+    if type(unit) ~= "string" or not (unit:match("^party%d+$") or unit:match("^raid%d+$")) then return end
   end
 
   if event == "UNIT_INVENTORY_CHANGED" and unit and unit ~= "player" then
@@ -1507,12 +1513,12 @@ function M:OnEvent(event, unit)
     return
   end
 
-  local now = GetTime()
-  if now - (self._last or 0) < 0.2 then
-    return
-  end
-  self._last = now
-  self:UpdateDisplay()
+  if self._updateQueued then return end
+  self._updateQueued = true
+  C_Timer.After(0.2, function()
+    self._updateQueued = nil
+    if self.db and self.db.enabled then self:UpdateDisplay() end
+  end)
 end
 
 Kaldo:RegisterModule("BuffCheck", M)

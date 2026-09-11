@@ -22,6 +22,15 @@ or `-WhatIf` to preview the destination files. The script copies runtime files
 and verifies their hashes; it does not delete files or modify saved settings.
 Run `/reload` in WoW afterwards. Restart WoW if the TOC file list changed.
 
+Run the regression checks from the repository root with Lua 5.1 or newer:
+
+```text
+lua tools/test_runtime.lua
+lua tools/test_castbar_style.lua
+```
+
+These checks simulate the WoW APIs. In-game validation is still needed for combat restrictions and visual layout.
+
 ## Features
 
 ### Equipment Info
@@ -67,6 +76,26 @@ Adds a few Mythic+ quality-of-life helpers.
 - auto-insert your keystone when relevant
 - reply to `!key` / `!keys`
 - accepted-group reminders
+- season-best dungeon overlays and dungeon teleport buttons
+- regional/world score percentile estimates
+- optional filtering of stale guild roster scores
+
+### Group Ready
+
+Shows a group preparation summary, available through `/kaldoinspect`.
+
+- member item levels, specializations, and Mythic+ scores
+- group buff coverage and composition warnings
+- configurable automatic display
+
+### Blizzard Cast Bars
+
+Customizes the default nameplate cast bars.
+
+- separate colors for normal, important, and non-interruptible casts
+- interrupt-ready glow with configurable color, speed, thickness, and segment count
+- animated settings preview
+- glow animation capped at 30 updates per second; a static border is used when dimensions are secret
 
 ### Auto Macros
 
@@ -100,6 +129,8 @@ Creates or updates a self-heal / potion macro based on available items, known sp
 
 - `/kaldo` opens the addon settings
 - `/kaldostatus` prints the current module status in chat
+- `/kaldoinspect` opens the Group Ready summary
+- `/kaldommdebug` prints Mythic+ percentile diagnostics
 
 ## Compatibility
 
