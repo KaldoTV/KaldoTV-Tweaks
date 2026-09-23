@@ -1,3 +1,8 @@
+v0.8.4
+Fix
+- Equipment info treats the rank 2 Rite of the Hash'ey enchant (ID 8689) as high rank.
+- Nameplate cast bars show where your interrupt will become available before the cast ends.
+
 v0.8.3
 
 Fix

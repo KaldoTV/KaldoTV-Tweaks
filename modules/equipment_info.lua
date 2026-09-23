@@ -86,7 +86,7 @@ local MAX_RANK_ENCHANT_IDS = makeIdSet({
   7971, 7973, 7975, 7977, 7979, 7981, 7983, 7985, 7987, 7989, 7991,
   7993, 7995, 7997, 7999, 8001, 8003, 8005, 8007, 8009, 8011, 8013,
   8015, 8017, 8019, 8021, 8023, 8025, 8027, 8029, 8031, 8033, 8035,
-  8037, 8039, 8041, 8159, 8161, 8163, 8613, 8615, 8820,
+  8037, 8039, 8041, 8159, 8161, 8163, 8613, 8615, 8689, 8820,
 })
 
 local MAX_RANK_GEM_IDS = makeIdSet({
@@ -134,6 +134,14 @@ local function getItemEnchantId(link)
 end
 
 local function isLowRankEnchant(link)
+  local enchantId = getItemEnchantId(link)
+  -- The explicit list is authoritative for known maximum-rank enchants.
+  -- Some new enchants expose their profession quality as tier 2 even though
+  -- rank 2 is the highest available rank for that enchant.
+  if enchantId and MAX_RANK_ENCHANT_IDS[enchantId] then
+    return false
+  end
+
   if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
     local info = C_TooltipInfo.GetHyperlink(link)
     local tier = findQualityTierInTooltipInfo(info)
@@ -142,12 +150,8 @@ local function isLowRankEnchant(link)
     end
   end
 
-  local enchantId = getItemEnchantId(link)
   if enchantId == nil then
     return nil
-  end
-  if MAX_RANK_ENCHANT_IDS[enchantId] then
-    return false
   end
   return true
 end

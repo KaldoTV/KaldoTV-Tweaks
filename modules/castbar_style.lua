@@ -235,11 +235,29 @@ end
 
 local function getCastInfo(unit)
   if not unit then return nil end
-  local name, _, _, _, _, _, _, notInterruptible, spellID = UnitCastingInfo(unit)
-  if type(name) ~= "nil" then return spellID, notInterruptible end
-  name, _, _, _, _, _, notInterruptible, spellID = UnitChannelInfo(unit)
-  if type(name) ~= "nil" then return spellID, notInterruptible end
+  local name, _, _, startTime, endTime, _, _, notInterruptible, spellID = UnitCastingInfo(unit)
+  if type(name) ~= "nil" then return spellID, notInterruptible, startTime, endTime end
+  name, _, _, startTime, endTime, _, notInterruptible, spellID = UnitChannelInfo(unit)
+  if type(name) ~= "nil" then return spellID, notInterruptible, startTime, endTime end
   return nil
+end
+
+local function publicNumber(value)
+  if issecretvalue and issecretvalue(value) then return nil end
+  return type(value) == "number" and value or nil
+end
+
+local function getInterruptReadyAt(spellID)
+  if not (spellID and C_Spell and C_Spell.GetSpellCooldown) then return nil end
+  local ok, info = pcall(C_Spell.GetSpellCooldown, spellID)
+  if not ok or type(info) ~= "table" or info.isEnabled == false then return nil end
+  if type(info.isActive) == "boolean" and info.isActive == false then return nil end
+
+  local startTime = publicNumber(info.startTime)
+  local duration = publicNumber(info.duration)
+  local modRate = publicNumber(info.modRate) or 1
+  if not (startTime and duration and modRate > 0) then return nil end
+  return startTime + (duration / modRate)
 end
 
 function M:EnsureDB()
@@ -298,8 +316,40 @@ function M:GetOrCreateState(unit, plate, bar)
     end
   end
   state = { unit = unit, plate = plate, bar = bar, glow = glow }
+  local marker = bar:CreateTexture(nil, "OVERLAY")
+  marker:SetColorTexture(1, 1, 1, 0.95)
+  marker:SetWidth(2)
+  marker:SetPoint("TOP", bar, "TOP", 0, 0)
+  marker:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
+  marker:Hide()
+  state.readyMarker = marker
   self.states[unit] = state
   return state
+end
+
+function M:UpdateReadyMarker(state, spellID, notInterruptible, castStart, castEnd)
+  local marker = state and state.readyMarker
+  if not marker then return end
+  marker:Hide()
+  if not (spellID and notInterruptible ~= true and GetTime) then return end
+
+  local now = publicNumber(GetTime())
+  local start = publicNumber(castStart)
+  local finish = publicNumber(castEnd)
+  local readyAt = getInterruptReadyAt(spellID)
+  if not (now and start and finish and readyAt and finish > start
+    and readyAt > now and readyAt < (finish / 1000)) then
+    return
+  end
+
+  local width = publicNumber(state.bar and state.bar:GetWidth())
+  if not width then return end
+  local fraction = (readyAt - (start / 1000)) / ((finish - start) / 1000)
+  if fraction <= 0 or fraction >= 1 then return end
+  marker:ClearAllPoints()
+  marker:SetPoint("TOP", state.bar, "TOPLEFT", width * fraction, 0)
+  marker:SetPoint("BOTTOM", state.bar, "BOTTOMLEFT", width * fraction, 0)
+  marker:Show()
 end
 
 function M:ApplyCastStyle(unit)
@@ -307,7 +357,7 @@ function M:ApplyCastStyle(unit)
   if not db.enabled then return end
   local plate, bar = findBlizzardCastBar(unit)
   if not (bar and bar.SetStatusBarColor) then return end
-  local spellID, notInterruptible = getCastInfo(unit)
+  local spellID, notInterruptible, castStart, castEnd = getCastInfo(unit)
   if type(spellID) == "nil" then return end
 
   local state = self:GetOrCreateState(unit, plate, bar)
@@ -352,6 +402,7 @@ function M:ApplyCastStyle(unit)
   bar:SetStatusBarColor(r, g, b)
 
   state.glow:Apply(db)
+  self:UpdateReadyMarker(state, spellID, notInterruptible, castStart, castEnd)
   if not db.glow_enabled or not isInterruptReady(getInterruptSpellID()) then
     state.glow:Hide()
   else
@@ -529,6 +580,7 @@ function M:OnEvent(event, unit)
     local state = self.states and self.states[unit]
     if state then
       if state.glow then state.glow:Hide() end
+      if state.readyMarker then state.readyMarker:Hide() end
       state.originalColor = nil
     end
     return
