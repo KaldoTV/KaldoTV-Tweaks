@@ -331,7 +331,7 @@ function M:UpdateReadyMarker(state, spellID, notInterruptible, castStart, castEn
   local marker = state and state.readyMarker
   if not marker then return end
   marker:Hide()
-  if not (spellID and notInterruptible ~= true and GetTime) then return end
+  if not (spellID and GetTime) then return end
 
   local now = publicNumber(GetTime())
   local start = publicNumber(castStart)
@@ -349,6 +349,13 @@ function M:UpdateReadyMarker(state, spellID, notInterruptible, castStart, castEn
   marker:ClearAllPoints()
   marker:SetPoint("TOP", state.bar, "TOPLEFT", width * fraction, 0)
   marker:SetPoint("BOTTOM", state.bar, "BOTTOMLEFT", width * fraction, 0)
+  if type(notInterruptible) == "boolean" and marker.SetAlphaFromBoolean then
+    -- notInterruptible can be a protected boolean during combat. Let the
+    -- client evaluate it instead of comparing it in addon code.
+    marker:SetAlphaFromBoolean(notInterruptible, 0, 1)
+  else
+    marker:SetAlpha(1)
+  end
   marker:Show()
 end
 
