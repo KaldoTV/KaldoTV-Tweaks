@@ -340,6 +340,50 @@ local function addEdit(parent, label, value, onChanged, x, y)
   return row, y + 56
 end
 
+local function addKeybind(parent, label, value, onChanged, x, y)
+  local row = createPanel(parent, C.panel, C.lineSoft)
+  row:SetPoint("TOPLEFT", x, -y)
+  row:SetSize(ROW_W, 48)
+  local fs = createFont(row, "GameFontNormal", label or "Key binding", C.text)
+  fs:SetPoint("LEFT", 16, 0)
+  fs:SetWidth(250)
+  local capture = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+  capture:SetSize(CONTROL_W, 26)
+  capture:SetPoint("RIGHT", -RIGHT_PAD, 0)
+  capture:SetAutoFocus(false)
+  capture:SetJustifyH("CENTER")
+  capture:SetScript("OnMouseDown", function(self)
+    self:SetFocus()
+    self:SetPropagateKeyboardInput(false)
+    self:SetText("Press a key (Esc clears)")
+    self:SetScript("OnKeyDown", function(button, key)
+      if key == "ESCAPE" then
+        value = ""
+        onChanged("")
+        button:SetText("Unbound")
+      else
+        local parts = {}
+        if IsControlKeyDown and IsControlKeyDown() then parts[#parts + 1] = "CTRL" end
+        if IsAltKeyDown and IsAltKeyDown() then parts[#parts + 1] = "ALT" end
+        if IsShiftKeyDown and IsShiftKeyDown() then parts[#parts + 1] = "SHIFT" end
+        parts[#parts + 1] = key
+        local newKey = table.concat(parts, "-")
+        value = newKey
+        onChanged(newKey)
+        button:SetText(newKey)
+      end
+      button:ClearFocus()
+      button:SetScript("OnKeyDown", nil)
+    end)
+  end)
+  capture:SetScript("OnEditFocusLost", function(self)
+    self:SetScript("OnKeyDown", nil)
+    self:SetText(value or "Unbound")
+  end)
+  capture:SetText(value and value ~= "" and value or "Unbound")
+  return row, y + 56
+end
+
 local function addSlider(parent, label, value, minv, maxv, step, onChanged, x, y)
   local row = createPanel(parent, C.panel, C.lineSoft)
   row:SetPoint("TOPLEFT", x, -y)
@@ -802,6 +846,10 @@ buildModuleOptionsOnCanvas = function(canvasFrame, modName, mod)
       addChild(canvasFrame, w)
     elseif opt.type == "input" then
       local w; w, y = addEdit(content, opt.label, optValue, applyOptionValue, x, y)
+      attachTooltip(w, tooltip)
+      addChild(canvasFrame, w)
+    elseif opt.type == "keybind" then
+      local w; w, y = addKeybind(content, opt.label, optValue, applyOptionValue, x, y)
       attachTooltip(w, tooltip)
       addChild(canvasFrame, w)
     elseif opt.type == "number" then

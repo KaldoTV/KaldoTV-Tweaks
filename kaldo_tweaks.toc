@@ -22,4 +22,5 @@ modules/group_ready.lua
 modules/castbar_style.lua
 modules/mm_keys.lua
 modules/auto_macros.lua
+modules/quick_shortcuts.lua
 modules/auto_potion.lua

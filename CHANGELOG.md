@@ -1,3 +1,10 @@
+v0.9.0
+New features
+- Quick Shortcuts: add bindable buttons for owned repair mounts and auction house Brutosaur mounts, with fixed or random selection.
+- Quick Shortcuts: add a Hearthstone section with a selectable checklist of collected Hearthstone toys and the regular Hearthstone.
+- Hearthstone shortcut: choose one selected Hearthstone when pressed, with optional Shaman Astral Recall and Personal Key to the Arcantina fallbacks.
+- Optionally generate macros for the mount and Hearthstone shortcuts.
+
 v0.8.4
 Fix
 - Equipment info treats the rank 2 Rite of the Hash'ey enchant (ID 8689) as high rank.
