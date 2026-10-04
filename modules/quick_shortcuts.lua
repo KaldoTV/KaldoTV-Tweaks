@@ -223,15 +223,17 @@ local function getHearthstoneName(itemID)
   return name or "Hearthstone"
 end
 
-function M:BuildHearthMacro(db, itemID)
+function M:BuildHearthMacro(db, itemID, includeFallbacks)
   local lines = { "#showtooltip " .. getHearthstoneName(itemID) }
   if itemID then lines[#lines + 1] = "/use item:" .. tostring(itemID) end
-  if db.hearth_astral and select(2, UnitClass("player")) == "SHAMAN" and knownSpell(ASTRAL_RECALL) then
+  -- A plain WoW macro executes every line on the same keypress; fallback
+  -- commands here cannot test whether the previous item was usable.
+  if includeFallbacks and db.hearth_astral and select(2, UnitClass("player")) == "SHAMAN" and knownSpell(ASTRAL_RECALL) then
     local astralName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(ASTRAL_RECALL)
     if not astralName and GetSpellInfo then astralName = GetSpellInfo(ASTRAL_RECALL) end
     lines[#lines + 1] = "/cast " .. (astralName or tostring(ASTRAL_RECALL))
   end
-  if db.hearth_arcantina and hasToy(ARCANTINA_TOY) then
+  if includeFallbacks and db.hearth_arcantina and hasToy(ARCANTINA_TOY) then
     lines[#lines + 1] = "/use item:" .. tostring(ARCANTINA_TOY)
   end
   return table.concat(lines, "\n")
@@ -286,9 +288,13 @@ function M:UpdateMacros()
   local repairBody = listMacro(repair, "/cast", db.repair_mode == "random")
   local auctionBody = listMacro(auction, "/cast", db.auction_mode == "random")
 
-  local selectedItem = chooseHearthstone(db)
-  local hearthBody = (selectedItem or (db.hearth_astral and select(2, UnitClass("player")) == "SHAMAN" and knownSpell(ASTRAL_RECALL))
-    or (db.hearth_arcantina and hasToy(ARCANTINA_TOY))) and self:BuildHearthMacro(db, selectedItem) or nil
+  local selectedItems = selectedHearthstones(db)
+  -- Keep the generated macro stable across toy/spell events. A macro cannot
+  -- dynamically choose a random item or conditionally run fallback commands.
+  local macroHearthstone = selectedItems[1]
+  local selectedItem = macroHearthstone
+  local hearthBody = (macroHearthstone or (db.hearth_astral and select(2, UnitClass("player")) == "SHAMAN" and knownSpell(ASTRAL_RECALL))
+    or (db.hearth_arcantina and hasToy(ARCANTINA_TOY))) and self:BuildHearthMacro(db, selectedItem, true) or nil
   if InCombatLockdown and InCombatLockdown() then self.pending = true; return end
   local function setSecure(button, body)
     button:SetAttribute("type", body and "macro" or nil)
@@ -314,7 +320,8 @@ function M:UpdateMacros()
   if db.create_macros then
     self:Apply(MacroUtils.NormalizeMacroName(db.repair_macro_name, "KaldoRepairMt"), repairBody)
     self:Apply(MacroUtils.NormalizeMacroName(db.auction_macro_name, "KaldoBruto"), auctionBody)
-    self:Apply(MacroUtils.NormalizeMacroName(db.hearth_macro_name, "KaldoHearth"), hearthBody)
+    local macroBody = macroHearthstone and self:BuildHearthMacro(db, macroHearthstone, false) or nil
+    self:Apply(MacroUtils.NormalizeMacroName(db.hearth_macro_name, "KaldoHearth"), macroBody)
   end
 end
 
