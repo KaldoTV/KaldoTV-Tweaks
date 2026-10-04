@@ -22,6 +22,10 @@ local HEARTHSTONE_TOYS = {
   212337, 228940, 236687, 263489, 210455, 184353, 183716, 180290, 182773,
   140192,
 }
+local EXCLUDED_HEARTHSTONE_TOYS = {
+  [118427] = true, -- Autographed Hearthstone Card
+  [119211] = true, -- Golden Hearthstone Card: Lord Jaraxxus (appearance toy)
+}
 
 local defaults = {
   enabled = false,
@@ -66,7 +70,7 @@ end
 local function hearthstoneToyItems()
   local found, seen = {}, {}
   local function addIfAvailable(itemID)
-    if seen[itemID] then return end
+    if seen[itemID] or EXCLUDED_HEARTHSTONE_TOYS[itemID] then return end
     local available = itemID == 6948 or hasToy(itemID)
     if available and itemID ~= 6948 and C_ToyBox and C_ToyBox.IsToyUsable then
       local usable = C_ToyBox.IsToyUsable(itemID)
@@ -101,7 +105,7 @@ local function hearthstoneToyItems()
         if C_ToyBox and C_ToyBox.GetToyInfo then _, name = C_ToyBox.GetToyInfo(itemID) end
         if not name and C_Item and C_Item.GetItemInfo then name = C_Item.GetItemInfo(itemID) end
         name = tostring(name or ""):lower()
-        if itemID ~= 118427 and (name:find("hearthstone", 1, true) or name:find("pierre de foyer", 1, true)
+        if not EXCLUDED_HEARTHSTONE_TOYS[itemID] and (name:find("hearthstone", 1, true) or name:find("pierre de foyer", 1, true)
           or name:find("stone of the hearth", 1, true)) then
           addIfAvailable(itemID)
         end
@@ -320,7 +324,8 @@ function M:UpdateMacros()
   if db.create_macros then
     self:Apply(MacroUtils.NormalizeMacroName(db.repair_macro_name, "KaldoRepairMt"), repairBody)
     self:Apply(MacroUtils.NormalizeMacroName(db.auction_macro_name, "KaldoBruto"), auctionBody)
-    local macroBody = macroHearthstone and self:BuildHearthMacro(db, macroHearthstone, false) or nil
+    local macroBody = macroHearthstone and self:BuildHearthMacro(db, macroHearthstone, false)
+      or "#showtooltip Hearthstone"
     self:Apply(MacroUtils.NormalizeMacroName(db.hearth_macro_name, "KaldoHearth"), macroBody)
   end
 end
