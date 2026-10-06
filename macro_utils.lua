@@ -16,11 +16,11 @@ function MacroUtils.NormalizeMacroName(name, fallback)
   return string.sub(name, 1, 16)
 end
 
-function MacroUtils.CreateOrUpdateMacro(macroName, macroBody)
+function MacroUtils.CreateOrUpdateMacro(macroName, macroBody, icon)
   local idx = GetMacroIndexByName and GetMacroIndexByName(macroName) or 0
   if idx and idx > 0 then
     if EditMacro then
-      local okEdit = pcall(EditMacro, idx, macroName, nil, macroBody)
+      local okEdit = pcall(EditMacro, idx, macroName, icon, macroBody)
       if okEdit then
         return true, "updated"
       end
@@ -33,7 +33,7 @@ function MacroUtils.CreateOrUpdateMacro(macroName, macroBody)
     return false, "CreateMacro unavailable"
   end
 
-  local icon = "INV_MISC_QUESTIONMARK"
+  icon = icon or "INV_MISC_QUESTIONMARK"
   local perCharacter = 1
   local okCreate = pcall(CreateMacro, macroName, icon, macroBody, perCharacter)
   if okCreate then

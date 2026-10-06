@@ -272,16 +272,14 @@ local function listContains(list, value)
 end
 
 local function buildThalassianRepairMacroBody(slots)
-  local lines = {
-    "#showtooltip item:" .. tostring(THALASSIAN_REPAIR_HAMMER),
-  }
+  local lines = {}
 
   for _, slotID in ipairs(slots or {}) do
     lines[#lines + 1] = "/use item:" .. tostring(THALASSIAN_REPAIR_HAMMER)
     lines[#lines + 1] = "/use " .. tostring(slotID)
   end
 
-  if #lines == 1 then
+  if #lines == 0 then
     lines[#lines + 1] = "/use item:" .. tostring(THALASSIAN_REPAIR_HAMMER)
   end
 
@@ -521,11 +519,11 @@ function M:NotifyRepairAfterCostSettles(beforeRepairCost, fallbackCost, partial)
   end)
 end
 
-function M:ApplyMacro(macroName, macroBody)
+function M:ApplyMacro(macroName, macroBody, icon)
   if not macroName or macroName == "" or not macroBody or macroBody == "" then return end
   if self._lastByMacroName[macroName] == macroBody then return end
 
-  local ok, actionOrErr = MacroUtils.CreateOrUpdateMacro(macroName, macroBody)
+  local ok, actionOrErr = MacroUtils.CreateOrUpdateMacro(macroName, macroBody, icon)
   if not ok then return end
 
   self._lastByMacroName[macroName] = macroBody
@@ -662,7 +660,9 @@ function M:UpdateAllMacros()
   if db.repair_hammer_enabled then
     local macroName = normalizeMacroName(db.repair_hammer_macro_name, "KaldoRepair")
     local macroBody = buildThalassianRepairMacroBody(getThalassianRepairSlots())
-    self:ApplyMacro(macroName, macroBody)
+    local hammerIcon = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(THALASSIAN_REPAIR_HAMMER))
+      or (GetItemIcon and GetItemIcon(THALASSIAN_REPAIR_HAMMER))
+    self:ApplyMacro(macroName, macroBody, hammerIcon)
   end
 end
 

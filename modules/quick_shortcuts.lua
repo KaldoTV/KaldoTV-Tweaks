@@ -22,11 +22,6 @@ local HEARTHSTONE_TOYS = {
   212337, 228940, 236687, 263489, 210455, 184353, 183716, 180290, 182773,
   140192,
 }
-local EXCLUDED_HEARTHSTONE_TOYS = {
-  [118427] = true, -- Autographed Hearthstone Card
-  [119211] = true, -- Golden Hearthstone Card: Lord Jaraxxus (appearance toy)
-}
-
 local defaults = {
   enabled = false,
   notify = true,
@@ -70,7 +65,7 @@ end
 local function hearthstoneToyItems()
   local found, seen = {}, {}
   local function addIfAvailable(itemID)
-    if seen[itemID] or EXCLUDED_HEARTHSTONE_TOYS[itemID] then return end
+    if seen[itemID] then return end
     local available = itemID == 6948 or hasToy(itemID)
     if available and itemID ~= 6948 and C_ToyBox and C_ToyBox.IsToyUsable then
       local usable = C_ToyBox.IsToyUsable(itemID)
@@ -82,36 +77,6 @@ local function hearthstoneToyItems()
 
   addIfAvailable(6948)
   for _, itemID in ipairs(HEARTHSTONE_TOYS) do addIfAvailable(itemID) end
-  local toyIDs
-  if C_ToyBox and C_ToyBox.GetAllToyIDs then
-    toyIDs = C_ToyBox.GetAllToyIDs()
-  elseif C_ToyBox and C_ToyBox.GetNumToys and C_ToyBox.GetToyFromIndex then
-    toyIDs = {}
-    for index = 1, C_ToyBox.GetNumToys() do
-      local itemID = C_ToyBox.GetToyFromIndex(index)
-      if itemID then toyIDs[#toyIDs + 1] = itemID end
-    end
-  elseif GetNumToy and GetToyFromIndex then
-    toyIDs = {}
-    for index = 1, GetNumToy() do
-      local itemID = GetToyFromIndex(index)
-      if itemID then toyIDs[#toyIDs + 1] = itemID end
-    end
-  end
-  if toyIDs then
-    for _, itemID in ipairs(toyIDs) do
-      if hasToy(itemID) then
-        local name
-        if C_ToyBox and C_ToyBox.GetToyInfo then _, name = C_ToyBox.GetToyInfo(itemID) end
-        if not name and C_Item and C_Item.GetItemInfo then name = C_Item.GetItemInfo(itemID) end
-        name = tostring(name or ""):lower()
-        if not EXCLUDED_HEARTHSTONE_TOYS[itemID] and (name:find("hearthstone", 1, true) or name:find("pierre de foyer", 1, true)
-          or name:find("stone of the hearth", 1, true)) then
-          addIfAvailable(itemID)
-        end
-      end
-    end
-  end
   table.sort(found)
   return found
 end
