@@ -27,6 +27,7 @@ Run the regression checks from the repository root with Lua 5.1 or newer:
 ```text
 lua tools/test_runtime.lua
 lua tools/test_castbar_style.lua
+lua tools/test_quick_shortcuts.lua
 ```
 
 These checks simulate the WoW APIs. In-game validation is still needed for combat restrictions and visual layout.

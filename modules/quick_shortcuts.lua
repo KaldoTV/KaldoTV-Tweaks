@@ -15,6 +15,7 @@ local REPAIR_MOUNTS = { yak = 122708, bear = 457485 }
 local AH_MOUNTS = { caravan = 264058, gilded = 465235 }
 local ARCANTINA_TOY = 253629
 local ASTRAL_RECALL = 556
+local MAGE_SILVERMOON = { teleport = 1259190, portal = 1259194 } -- Midnight
 local HEARTHSTONE_TOYS = {
   263933, 264367, 265100, 245970, 246565, 257736, 235016, 54452, 64488,
   93672, 162973, 163045, 165669, 165670, 165802, 166746, 166747, 168907,
@@ -29,6 +30,7 @@ local defaults = {
   auction_mode = "random",
   hearth_random = true,
   hearth_selected = {},
+  hearth_mage = false,
   hearth_astral = true,
   hearth_arcantina = true,
   repair_macro_name = "KaldoRepairMt",
@@ -117,6 +119,7 @@ function M:GetOptions()
     { type="input", key="auction_macro_name", label=(L and L.QUICK_SHORTCUTS_AUCTION_MACRO) or "Auction macro name" },
     { type="header", text=(L and L.QUICK_SHORTCUTS_HEARTH) or "Hearthstone" },
     { type="keybind", key="bindings.hearth", buttonName="KaldoQuickHearthButton", label=(L and L.QUICK_SHORTCUTS_BIND_HEARTH) or "Hearthstone shortcut" },
+    { type="toggle", key="hearth_mage", label=(L and L.QUICK_SHORTCUTS_MAGE_PRIORITY) or "Mage: Silvermoon City (Midnight) first (Teleport solo / Portal in a group)" },
     { type="toggle", key="hearth_random", label=(L and L.QUICK_SHORTCUTS_HEARTH_RANDOM) or "Randomly choose from checked hearthstones" },
     { type="toggle", key="hearth_astral", label=(L and L.QUICK_SHORTCUTS_ASTRAL) or "Shaman Astral Recall fallback" },
     { type="toggle", key="hearth_arcantina", label=(L and L.QUICK_SHORTCUTS_ARCANTINA) or "Personal Key to the Arcantina fallback" },
@@ -149,21 +152,20 @@ function M:OnRegister()
     hearth = CreateFrame("Button", "KaldoQuickHearthButton", UIParent, "SecureActionButtonTemplate"),
   }
   self.bindingOwner = CreateFrame("Frame", "KaldoQuickShortcutsBindingOwner", UIParent, "SecureFrameTemplate")
-  for _, button in pairs(self.buttons) do
+  for action, button in pairs(self.buttons) do
     button:SetSize(1, 1)
     button:SetPoint("CENTER", UIParent, "CENTER", 0, -10000)
     button:SetAlpha(0)
     button:EnableMouse(false)
     button:RegisterForClicks("AnyDown")
-    button:SetAttribute("type", "macro")
-    button:SetAttribute("type1", "macro")
+    if action ~= "hearth" then
+      button:SetAttribute("type", "macro")
+      button:SetAttribute("type1", "macro")
+    end
     button:SetAttribute("pressAndHoldAction", true)
     button:Show()
   end
-  self.buttons.hearth:SetAttribute("macrotext", "/use item:6948")
-  self.buttons.hearth:SetAttribute("macrotext1", "/use item:6948")
   self.buttons.hearth:SetScript("PreClick", function(button)
-    if InCombatLockdown and InCombatLockdown() then return end
     self:PrepareHearthAction(button)
   end)
 end
@@ -176,43 +178,108 @@ local function selectedHearthstones(db)
   return selected
 end
 
+local function cooldownReady(startTime, duration, enabled, modRate)
+  if issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)
+    or issecretvalue(enabled) or issecretvalue(modRate)) then return false end
+  if enabled == false or enabled == 0 then return false end
+  if type(startTime) ~= "number" or type(duration) ~= "number" then return false end
+  if startTime == 0 or duration == 0 then return true end
+  return startTime + duration / (modRate or 1) <= GetTime()
+end
+
+local function itemReady(itemID)
+  if itemID == 6948 then
+    local getCount = C_Item and C_Item.GetItemCount or GetItemCount
+    if not getCount then return false end
+    local count = getCount(itemID)
+    if issecretvalue and issecretvalue(count) then return false end
+    if not count or count <= 0 then return false end
+    local isUsable = C_Item and C_Item.IsUsableItem or IsUsableItem
+    if isUsable then
+      local usable = isUsable(itemID)
+      if issecretvalue and issecretvalue(usable) then return false end
+      if usable == false then return false end
+    end
+  else
+    if not hasToy(itemID) then return false end
+    if C_ToyBox and C_ToyBox.IsToyUsable then
+      local usable = C_ToyBox.IsToyUsable(itemID)
+      if issecretvalue and issecretvalue(usable) then return false end
+      if usable == false then return false end
+    end
+  end
+  local getCooldown = C_Item and C_Item.GetItemCooldown or GetItemCooldown
+  if not getCooldown then return false end
+  return cooldownReady(getCooldown(itemID))
+end
+
+local function spellReady(spellID)
+  if not knownSpell(spellID) then return false end
+  local isUsable = C_Spell and C_Spell.IsSpellUsable or IsUsableSpell
+  if isUsable then
+    local usable = isUsable(spellID)
+    if issecretvalue and issecretvalue(usable) then return false end
+    if usable == false then return false end
+  end
+  if C_Spell and C_Spell.GetSpellCooldown then
+    local info = C_Spell.GetSpellCooldown(spellID)
+    if not info then return false end
+    return cooldownReady(info.startTime, info.duration, info.isEnabled, info.modRate)
+  elseif GetSpellCooldown then
+    return cooldownReady(GetSpellCooldown(spellID))
+  end
+  return false
+end
+
+local function astralRecallReady(db)
+  return db.hearth_astral and select(2, UnitClass("player")) == "SHAMAN" and spellReady(ASTRAL_RECALL)
+end
+
+local function magePrioritySpell(db)
+  if db.hearth_mage ~= true then return nil end
+  if select(2, UnitClass("player")) ~= "MAGE" then return nil end
+  local spellID = IsInGroup and IsInGroup() and MAGE_SILVERMOON.portal or MAGE_SILVERMOON.teleport
+  if spellID and spellReady(spellID) then return spellID end
+end
+
 local function chooseHearthstone(db)
-  local choices = selectedHearthstones(db)
+  local choices = {}
+  for _, itemID in ipairs(selectedHearthstones(db)) do
+    if itemReady(itemID) then choices[#choices + 1] = itemID end
+  end
   if #choices == 0 then return nil end
   if db.hearth_random and #choices > 1 then return choices[math.random(#choices)] end
   return choices[1]
 end
 
-local function getHearthstoneName(itemID)
-  if not itemID then return "Hearthstone" end
-  local name
-  if itemID ~= 6948 and C_ToyBox and C_ToyBox.GetToyInfo then _, name = C_ToyBox.GetToyInfo(itemID) end
-  if not name and C_Item and C_Item.GetItemInfo then name = C_Item.GetItemInfo(itemID) end
-  return name or "Hearthstone"
-end
-
-function M:BuildHearthMacro(db, itemID, includeFallbacks)
-  local lines = { "#showtooltip " .. getHearthstoneName(itemID) }
-  if itemID then lines[#lines + 1] = "/use item:" .. tostring(itemID) end
-  -- A plain WoW macro executes every line on the same keypress; fallback
-  -- commands here cannot test whether the previous item was usable.
-  if includeFallbacks and db.hearth_astral and select(2, UnitClass("player")) == "SHAMAN" and knownSpell(ASTRAL_RECALL) then
-    local astralName = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(ASTRAL_RECALL)
-    if not astralName and GetSpellInfo then astralName = GetSpellInfo(ASTRAL_RECALL) end
-    lines[#lines + 1] = "/cast " .. (astralName or tostring(ASTRAL_RECALL))
-  end
-  if includeFallbacks and db.hearth_arcantina and hasToy(ARCANTINA_TOY) then
-    lines[#lines + 1] = "/use item:" .. tostring(ARCANTINA_TOY)
-  end
-  return table.concat(lines, "\n")
+function M:BuildHearthMacro()
+  -- Click a direct item/toy/spell action so the macro uses the same selection
+  -- as the keybind without chaining another macro.
+  return "#showtooltip item:6948\n/click KaldoQuickHearthButton LeftButton 1"
 end
 
 function M:PrepareHearthAction(button)
+  if InCombatLockdown and InCombatLockdown() then return end
   local db = self.db or self:EnsureDB()
-  local itemID = chooseHearthstone(db)
-  local body = self:BuildHearthMacro(db, itemID)
-  button:SetAttribute("macrotext", body)
-  button:SetAttribute("macrotext1", body)
+  local actionType, itemID, spellID
+  if db.enabled then
+    spellID = magePrioritySpell(db)
+    if not spellID then itemID = chooseHearthstone(db) end
+    if spellID then
+      actionType = "spell"
+    elseif itemID then
+      actionType = itemID == 6948 and "item" or "toy"
+    elseif astralRecallReady(db) then
+      actionType, spellID = "spell", ASTRAL_RECALL
+    elseif db.hearth_arcantina and itemReady(ARCANTINA_TOY) then
+      actionType, itemID = "toy", ARCANTINA_TOY
+    end
+  end
+  button:SetAttribute("type", actionType)
+  button:SetAttribute("type1", actionType)
+  button:SetAttribute("item", actionType == "item" and ("item:" .. tostring(itemID)) or nil)
+  button:SetAttribute("toy", actionType == "toy" and itemID or nil)
+  button:SetAttribute("spell", spellID)
 end
 
 function M:Apply(name, body)
@@ -256,13 +323,6 @@ function M:UpdateMacros()
   local repairBody = listMacro(repair, "/cast", db.repair_mode == "random")
   local auctionBody = listMacro(auction, "/cast", db.auction_mode == "random")
 
-  local selectedItems = selectedHearthstones(db)
-  -- Keep the generated macro stable across toy/spell events. A macro cannot
-  -- dynamically choose a random item or conditionally run fallback commands.
-  local macroHearthstone = selectedItems[1]
-  local selectedItem = macroHearthstone
-  local hearthBody = (macroHearthstone or (db.hearth_astral and select(2, UnitClass("player")) == "SHAMAN" and knownSpell(ASTRAL_RECALL))
-    or (db.hearth_arcantina and hasToy(ARCANTINA_TOY))) and self:BuildHearthMacro(db, selectedItem, true) or nil
   if InCombatLockdown and InCombatLockdown() then self.pending = true; return end
   local function setSecure(button, body)
     button:SetAttribute("type", body and "macro" or nil)
@@ -272,7 +332,7 @@ function M:UpdateMacros()
   end
   setSecure(self.buttons.repair, repairBody)
   setSecure(self.buttons.auction, auctionBody)
-  setSecure(self.buttons.hearth, hearthBody)
+  self:PrepareHearthAction(self.buttons.hearth)
   if ClearOverrideBindings then ClearOverrideBindings(self.bindingOwner) end
   if SetOverrideBindingClick then
     local bindings = db.bindings or {}
@@ -288,9 +348,7 @@ function M:UpdateMacros()
   if db.create_macros then
     self:Apply(MacroUtils.NormalizeMacroName(db.repair_macro_name, "KaldoRepairMt"), repairBody)
     self:Apply(MacroUtils.NormalizeMacroName(db.auction_macro_name, "KaldoBruto"), auctionBody)
-    local macroBody = macroHearthstone and self:BuildHearthMacro(db, macroHearthstone, false)
-      or "#showtooltip Hearthstone"
-    self:Apply(MacroUtils.NormalizeMacroName(db.hearth_macro_name, "KaldoHearth"), macroBody)
+    self:Apply(MacroUtils.NormalizeMacroName(db.hearth_macro_name, "KaldoHearth"), self:BuildHearthMacro())
   end
 end
 

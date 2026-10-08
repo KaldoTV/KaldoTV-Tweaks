@@ -1,3 +1,20 @@
+v0.9.5
+New feature
+- Mage Hearthstone shortcut: add one option to prioritize Silvermoon City (Midnight), using Teleport when solo and Portal when in a party or raid, if the appropriate spell is learned and available.
+
+Fix
+- Hearthstone shortcut: skip missing, unusable, or cooling down hearthstones; fall back to available Shaman Astral Recall, then the Personal Key to the Arcantina, according to enabled options.
+- Hearthstone macro: use the same selection and fallback logic as the shortcut on each press.
+
+v0.9.4
+Fix
+- Remove the Dalaran Hearthstone from the random Hearthstone rotation.
+
+v0.9.3
+Fix
+- Repair Hammer macro: remove `#showtooltip` to reduce macro length and use the hammer's icon when creating or updating the macro.
+- Hearthstone selection: use a fixed list of toy IDs instead of matching toy names, preventing Hearthstone card toys from entering the rotation.
+
 v0.9.0
 New features
 - Quick Shortcuts: add bindable buttons for owned repair mounts and auction house Brutosaur mounts, with fixed or random selection.
