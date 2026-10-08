@@ -1,6 +1,7 @@
 v0.9.5
-New feature
+New features
 - Mage Hearthstone shortcut: add one option to prioritize Silvermoon City (Midnight), using Teleport when solo and Portal when in a party or raid, if the appropriate spell is learned and available.
+- Repair mount shortcut: add the Hearthkeeper's Wandering Caravan as a fixed choice and include it in random selection when collected.
 
 Fix
 - Hearthstone shortcut: skip missing, unusable, or cooling down hearthstones; fall back to available Shaman Astral Recall, then the Personal Key to the Arcantina, according to enabled options.

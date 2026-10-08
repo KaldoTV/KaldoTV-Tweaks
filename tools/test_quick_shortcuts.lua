@@ -288,7 +288,51 @@ click()
 expectAction("toy", 253629)
 assert(macros.KaldoHearth == module:BuildHearthMacro(), "Generated macro changed with the cooldown")
 
+-- The Hearthkeeper caravan supports fixed and random repair mount selection.
+reset()
+state.mounts = {
+  [1] = { spellID = 122708, collected = true },
+  [2] = { spellID = 457485, collected = true },
+  [2982] = { spellID = 142515, collected = true },
+}
+C_MountJournal = {
+  GetMountIDs = function()
+    local ids = {}
+    for id in pairs(state.mounts or {}) do ids[#ids + 1] = id end
+    return ids
+  end,
+  GetMountInfoByID = function(id)
+    local mount = state.mounts[id]
+    return "Mount " .. tostring(id), mount.spellID, nil, nil, nil, nil, nil, nil, nil, nil, mount.collected
+  end,
+}
+module:UpdateMacros()
+local repairButton = frames.KaldoQuickRepairButton
+assert(repairButton:GetAttribute("macrotext") == "#showtooltip\n/castrandom 122708,142515,457485")
+assert(macros.KaldoRepairMt == repairButton:GetAttribute("macrotext"))
+state.db.repair_mode = "hearthkeeper"
+module:UpdateMacros()
+assert(repairButton:GetAttribute("macrotext") == "#showtooltip 142515\n/cast 142515")
+assert(macros.KaldoRepairMt == repairButton:GetAttribute("macrotext"))
+state.mounts[2982].collected = false
+module:UpdateMacros()
+assert(repairButton:GetAttribute("type") == nil and repairButton:GetAttribute("macrotext") == nil)
+state.db.repair_mode = "random"
+module:UpdateMacros()
+assert(repairButton:GetAttribute("macrotext") == "#showtooltip\n/castrandom 122708,457485")
+local foundCaravan = false
+for _, option in ipairs(module:GetOptions()) do
+  if option.key == "repair_mode" then
+    for _, entry in ipairs(option.values) do
+      if entry[1] == "hearthkeeper" then foundCaravan = true end
+    end
+  end
+end
+assert(foundCaravan, "Hearthkeeper caravan missing from repair mount settings")
+
 -- Keep the legacy cooldown APIs functional as well.
+reset()
+hearthOnCooldown()
 GetItemCount, GetItemCooldown = C_Item.GetItemCount, C_Item.GetItemCooldown
 IsUsableSpell = C_Spell.IsSpellUsable
 GetSpellCooldown = function(id)
@@ -307,4 +351,4 @@ state.knownSpells[1259190] = true
 state.spellCooldowns[1259190] = { startTime = 0, duration = 0, isEnabled = true, modRate = 1 }
 click()
 expectAction("spell", 1259190)
-print("PASS: Hearthstone readiness, Arcantina regression, Mage Midnight priority, Astral Recall priority, selection, secrets, combat, generated macro, legacy APIs")
+print("PASS: Hearthstone readiness, Arcantina regression, Mage Midnight priority, Astral Recall priority, selection, secrets, combat, generated macro, Hearthkeeper repair mount, legacy APIs")

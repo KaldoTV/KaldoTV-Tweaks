@@ -11,7 +11,7 @@ M.events = {
   "SPELLS_CHANGED", "PLAYER_SPECIALIZATION_CHANGED",
 }
 
-local REPAIR_MOUNTS = { yak = 122708, bear = 457485 }
+local REPAIR_MOUNTS = { yak = 122708, bear = 457485, hearthkeeper = 142515 }
 local AH_MOUNTS = { caravan = 264058, gilded = 465235 }
 local ARCANTINA_TOY = 253629
 local ASTRAL_RECALL = 556
@@ -108,6 +108,7 @@ function M:GetOptions()
     { type="select", key="repair_mode", label=(L and L.QUICK_SHORTCUTS_REPAIR_MODE) or "Repair mount", values={
       { "yak", (L and L.QUICK_SHORTCUTS_YAK) or "Yak" },
       { "bear", (L and L.QUICK_SHORTCUTS_BEAR) or "Bear" },
+      { "hearthkeeper", (L and L.QUICK_SHORTCUTS_HEARTHKEEPER) or "Hearthkeeper's Wandering Caravan" },
       { "random", (L and L.QUICK_SHORTCUTS_RANDOM) or "Random owned" },
     } },
     { type="input", key="repair_macro_name", label=(L and L.QUICK_SHORTCUTS_REPAIR_MACRO) or "Repair macro name" },
